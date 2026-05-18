@@ -1,0 +1,274 @@
+---
+title: Request & Response
+description: Référence complète des objets Request et Response dans Lacis.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Chaque handler de route reçoit un objet `req` (Request) et un objet `res` (Response).
+
+```ts
+import type { Request, Response } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  res.json({ ok: true })
+}
+```
+
+---
+
+## Request
+
+### `req.params`
+
+Paramètres d'URL extraits des segments dynamiques de la route.
+
+```ts
+// routes/users/[id]/index.ts → /users/:id
+export async function GET(req: Request, res: Response) {
+  const { id } = req.params
+  res.json({ id })
+}
+```
+
+**Type :** `Record<string, string>`
+
+---
+
+### `req.query`
+
+La query string parsée sous forme d'objet clé-valeur. Les valeurs sont toujours des chaînes — convertissez-les si nécessaire.
+
+```ts
+// GET /search?q=lacis&page=2
+export async function GET(req: Request, res: Response) {
+  const { q, page } = req.query
+  res.json({ q, page: Number(page) })
+}
+```
+
+**Type :** `Record<string, string>`
+
+---
+
+### `req.json<T>()`
+
+Lit et parse le corps de la requête en JSON.
+
+```ts
+interface CreateUser {
+  name: string
+  email: string
+}
+
+export async function POST(req: Request, res: Response) {
+  const body = await req.json<CreateUser>()
+  res.status(201).json({ created: body.name })
+}
+```
+
+**Signature :** `json<T>(): Promise<T>`
+
+<Aside type="caution">
+Le flux du corps ne peut être lu qu'une seule fois. Appelez `req.json()` une seule fois par requête.
+</Aside>
+
+---
+
+### `req.form<T>()`
+
+Parse un corps `multipart/form-data`. Les champs simples sont des chaînes ; les fichiers sont des objets `UploadedFile`.
+
+```ts
+export async function POST(req: Request, res: Response) {
+  const form = await req.form<{ name: string; avatar: UploadedFile }>()
+  console.log(form.name)           // 'Alice'
+  console.log(form.avatar.size)    // taille du fichier en octets
+  res.status(201).json({ ok: true })
+}
+```
+
+**Signature :** `form<T>(): Promise<T>`
+
+---
+
+### `req.body()`
+
+Lit le corps brut de la requête sous forme de `Buffer`. Utile pour les payloads binaires ou le parsing personnalisé.
+
+```ts
+export async function POST(req: Request, res: Response) {
+  const raw = await req.body()
+  const text = raw.toString('utf-8')
+  res.send(text)
+}
+```
+
+**Signature :** `body(): Promise<Buffer>`
+
+La taille maximale du corps est de 10 Mo. Les requêtes plus grandes sont rejetées avec `413 Payload Too Large`.
+
+---
+
+### `req.getHeader(name)`
+
+Lit un header de requête. La recherche est insensible à la casse.
+
+```ts
+export async function GET(req: Request, res: Response) {
+  const auth = req.getHeader('authorization')
+  if (!auth) return res.status(401).json({ error: 'Non autorisé' })
+  res.json({ ok: true })
+}
+```
+
+**Signature :** `getHeader(name: string): string | undefined`
+
+---
+
+### `req.cookies.get(name)`
+
+Lit un cookie depuis le header `Cookie` entrant. La valeur est décodée automatiquement.
+
+```ts
+export async function GET(req: Request, res: Response) {
+  const sessionId = req.cookies.get('session')
+  if (!sessionId) return res.status(401).json({ error: 'Pas de session' })
+  res.json({ session: sessionId })
+}
+```
+
+**Signature :** `get(name: string): string | undefined`
+
+---
+
+### `req.cookies.all()`
+
+Retourne tous les cookies sous forme d'objet simple.
+
+```ts
+export async function GET(req: Request, res: Response) {
+  const cookies = req.cookies.all()
+  res.json(cookies)
+}
+```
+
+**Signature :** `all(): Record<string, string>`
+
+---
+
+### `req.connection.remoteAddress`
+
+L'adresse IP du client. Pour les requêtes derrière un reverse proxy, utilisez le header `X-Forwarded-For` à la place.
+
+```ts
+export async function GET(req: Request, res: Response) {
+  const ip = req.getHeader('x-forwarded-for') ?? req.connection.remoteAddress
+  res.json({ ip })
+}
+```
+
+---
+
+## Response
+
+### `res.json(data)`
+
+Sérialise `data` en JSON, définit `Content-Type: application/json` et termine la réponse.
+
+```ts
+res.json({ users: ['alice', 'bob'] })
+```
+
+---
+
+### `res.html(content)`
+
+Envoie une chaîne HTML avec `Content-Type: text/html; charset=utf-8`.
+
+```ts
+res.html('<h1>Bonjour, monde</h1>')
+```
+
+---
+
+### `res.send(data)`
+
+Envoie une réponse en texte brut. Si `data` n'est pas une chaîne, délègue à `res.json()`.
+
+```ts
+res.send('pong')
+```
+
+---
+
+### `res.redirect(url, status?)`
+
+Redirige le client. Le statut par défaut est `302`.
+
+```ts
+res.redirect('/login')
+res.redirect('/nouveau-chemin', 301)
+```
+
+---
+
+### `res.status(code)`
+
+Définit le code de statut HTTP. Chaînable.
+
+```ts
+res.status(201).json({ created: true })
+res.status(204).send('')
+```
+
+---
+
+### `res.setHeader(name, value)`
+
+Définit un header de réponse. Doit être appelé avant la fin de la réponse.
+
+```ts
+res.setHeader('X-Custom-Header', 'lacis')
+res.json({ ok: true })
+```
+
+---
+
+### `res.cookies.set(name, value, options?)`
+
+Met en file d'attente un header `Set-Cookie`. Chaînable.
+
+```ts
+res.cookies
+  .set('session', 'abc123', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'Lax',
+    maxAge: 60 * 60 * 24 * 7,
+  })
+  .set('theme', 'dark')
+
+res.json({ ok: true })
+```
+
+| Option | Type | Description |
+|---|---|---|
+| `path` | `string` | Chemin du cookie (défaut : `/`) |
+| `domain` | `string` | Domaine du cookie |
+| `maxAge` | `number` | Durée de vie en secondes |
+| `expires` | `Date` | Date d'expiration absolue |
+| `httpOnly` | `boolean` | Interdit l'accès JS |
+| `secure` | `boolean` | HTTPS uniquement |
+| `sameSite` | `'Strict' \| 'Lax' \| 'None'` | Politique SameSite |
+
+---
+
+### `res.cookies.delete(name)`
+
+Supprime un cookie en définissant `Max-Age: 0`.
+
+```ts
+res.cookies.delete('session')
+res.json({ loggedOut: true })
+```

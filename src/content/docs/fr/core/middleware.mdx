@@ -1,0 +1,161 @@
+---
+title: Middleware
+description: Middleware en cascade et par chemin exact dans Lacis.
+---
+
+import { Aside, FileTree } from '@astrojs/starlight/components';
+
+Le middleware de Lacis est basé sur les fichiers. Placez un fichier middleware aux côtés de vos fichiers de routes et Lacis le charge automatiquement. Il existe deux conventions de nommage avec des comportements de portée différents.
+
+<Aside type="tip" title="Distinction clé">
+`+middleware.global.ts` s'applique en cascade au répertoire courant et à tous ses sous-répertoires. `+middleware.ts` s'applique uniquement aux routes du répertoire exact et ne cascade pas.
+</Aside>
+
+## Les deux types
+
+### `+middleware.global.ts` — en cascade
+
+S'exécute pour toutes les routes à son niveau et en dessous. Idéal pour l'authentification, les logs ou le CORS qui s'appliquent à toute une section de l'API.
+
+### `+middleware.ts` — chemin exact
+
+S'exécute uniquement quand le chemin de la route correspond au répertoire qui le contient. Ne s'applique pas aux routes enfants.
+
+## Structure des fichiers
+
+<FileTree>
+- routes/
+  - +middleware.global.ts   (s'exécute pour toutes les routes)
+  - index.ts                (GET /)
+  - api/
+    - +middleware.global.ts (s'exécute pour /api et toutes les routes /api/*)
+    - +middleware.ts        (s'exécute pour /api uniquement — PAS /api/users)
+    - index.ts              (GET /api)
+    - users/
+      - index.ts            (GET /api/users)
+      - [id]/
+        - index.ts          (GET /api/users/:id)
+</FileTree>
+
+Pour la route `GET /api/users`, l'ordre d'exécution est :
+
+1. `routes/+middleware.global.ts` `beforeRequest`
+2. `routes/api/+middleware.global.ts` `beforeRequest`
+3. Handler de route
+4. `routes/api/+middleware.global.ts` `afterRequest`
+5. `routes/+middleware.global.ts` `afterRequest`
+
+`routes/api/+middleware.ts` ne s'exécute **pas** pour `/api/users` — uniquement pour `/api` lui-même.
+
+## Hooks
+
+Chaque fichier middleware peut exporter n'importe quelle combinaison de `beforeRequest`, `afterRequest` et `onError`.
+
+### `beforeRequest`
+
+S'exécute avant le handler de route. Retourner `false` arrête le pipeline — le handler et tous les middlewares suivants sont ignorés.
+
+```ts
+// routes/api/+middleware.global.ts
+import type { Request, Response } from 'lacis'
+
+export const beforeRequest = async (req: Request, res: Response) => {
+  const token = req.getHeader('authorization')
+  if (!token) {
+    res.status(401).json({ error: 'Non autorisé' })
+    return false
+  }
+}
+```
+
+Vous pouvez exporter un tableau — les handlers s'exécutent dans l'ordre, et le premier `false` arrête la chaîne.
+
+```ts
+export const beforeRequest = [authCheck, rateLimitCheck]
+```
+
+### `afterRequest`
+
+S'exécute après la fin du handler de route.
+
+```ts
+export const afterRequest = async (req: Request, res: Response) => {
+  console.log(`${req.method} ${req.url}`)
+}
+```
+
+### `onError`
+
+S'exécute quand une erreur non gérée est levée par un middleware ou le handler de route.
+
+```ts
+export const onError = async (
+  req: Request,
+  res: Response,
+  context: { error: unknown; phase: string }
+) => {
+  console.error(`[${context.phase}]`, context.error)
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Erreur interne du serveur' })
+  }
+}
+```
+
+## Enregistrement dans `createServer`
+
+Pour un middleware qui doit s'appliquer globalement, passez-le directement à `createServer` :
+
+```ts
+import { createServer } from 'lacis'
+
+createServer('./routes', {
+  middleware: {
+    beforeRequest: async (req, res) => {
+      console.log(`--> ${req.method} ${req.url}`)
+    },
+    afterRequest: async (req, res) => {
+      console.log(`<-- ${req.method} ${req.url}`)
+    },
+    onError: async (req, res, ctx) => {
+      console.error('Erreur non gérée :', ctx.error)
+    },
+  },
+})
+```
+
+Chaque propriété accepte un handler unique ou un tableau.
+
+## Hooks de cycle de vie
+
+Les hooks de cycle de vie sont enregistrés sous `hooks` dans `createServer`.
+
+### `onNotFound`
+
+Appelé quand aucune route ne correspond à la requête. Si le hook envoie une réponse, le JSON 404 par défaut est ignoré.
+
+```ts
+createServer('./routes', {
+  hooks: {
+    onNotFound: async (req, res) => {
+      res.status(404).json({ error: 'Non trouvé', path: req.url })
+    },
+  },
+})
+```
+
+### `onShutdown`
+
+Appelé lors de l'arrêt gracieux sur `SIGINT`, `SIGTERM` ou `SIGHUP`. Utilisez-le pour fermer les connexions à la base de données ou vider les buffers.
+
+```ts
+createServer('./routes', {
+  hooks: {
+    onShutdown: async () => {
+      await db.end()
+      await cache.quit()
+    },
+  },
+})
+```
+
+`onShutdown` s'exécute après que le serveur a cessé d'accepter des connexions. Les erreurs à l'intérieur sont capturées et loguées — elles n'empêchent pas l'arrêt.

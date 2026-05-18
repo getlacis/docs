@@ -1,0 +1,111 @@
+---
+title: OpenAPI
+description: Génération automatique de spec OpenAPI dans Lacis.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Lacis génère une spec OpenAPI 3.1.0 à l'exécution depuis vos routes enregistrées. Les routes enveloppées avec `defineHandler` contribuent leurs schémas et champs `meta` à la spec.
+
+## Configuration
+
+Ajoutez une clé `openapi` à la config de votre serveur :
+
+```ts
+// server.ts
+import { createServer } from 'lacis'
+
+createServer('./routes', {
+  openapi: {
+    path: '/openapi.json',
+    info: {
+      title: 'Mon API',
+      version: '1.0.0',
+    },
+  },
+})
+```
+
+La spec est servie sur `/openapi.json` à chaque requête. Aucune étape de build requise.
+
+## Convertisseurs de schémas
+
+La spec est construite en convertissant vos schémas de validation en JSON Schema. Chaque bibliothèque nécessite son propre convertisseur :
+
+| Bibliothèque | Package à installer |
+|---|---|
+| Zod 4.4+ | aucun (natif `toJSONSchema`) |
+| Zod < 4.4 | `zod-to-json-schema` |
+| Valibot | `@valibot/to-json-schema` |
+| ArkType | aucun (natif `.toJsonSchema()`) |
+
+Installez uniquement le convertisseur correspondant à votre validateur.
+
+## Annoter les routes avec `meta`
+
+```ts
+// routes/users/[id]/index.ts
+import { defineHandler } from 'lacis'
+import { z } from 'zod'
+
+export const GET = defineHandler({
+  params: z.object({ id: z.string().uuid() }),
+  meta: {
+    summary: 'Obtenir un utilisateur par ID',
+    description: 'Retourne un seul enregistrement utilisateur.',
+    tags: ['users'],
+  },
+  handler: async (req, res) => {
+    res.json({ id: req.params.id })
+  },
+})
+
+export const DELETE = defineHandler({
+  params: z.object({ id: z.string().uuid() }),
+  meta: { summary: 'Supprimer un utilisateur', tags: ['users'], deprecated: true },
+  handler: async (req, res) => {
+    res.status(204).send('')
+  },
+})
+```
+
+## Utiliser la spec
+
+Le JSON généré est de l'OpenAPI 3.1.0 standard — intégrez-le dans n'importe quel outil compatible.
+
+**Scalar** (recommandé) :
+
+```html
+<!doctype html>
+<html>
+  <head><title>Référence API</title></head>
+  <body>
+    <script
+      id="api-reference"
+      data-url="/openapi.json"
+      src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"
+    ></script>
+  </body>
+</html>
+```
+
+**Postman / Insomnia** : utilisez "Import from URL" → `http://localhost:3000/openapi.json`.
+
+**OpenAPI Generator** : générez des clients, SDKs ou stubs serveur dans plus de 50 langages à partir de la spec.
+
+```bash
+# Installation
+npm install @openapitools/openapi-generator-cli -g
+
+# Générer un client TypeScript fetch
+openapi-generator-cli generate \
+  -i http://localhost:3000/openapi.json \
+  -g typescript-fetch \
+  -o ./generated/client
+```
+
+Voir la [documentation OpenAPI Generator](https://openapi-generator.tech/docs/installation/) pour tous les générateurs et options disponibles.
+
+## Routes sans `defineHandler`
+
+Les handlers simples apparaissent dans la spec avec une opération minimale. Ajoutez `defineHandler` + `meta` pour obtenir une sortie plus détaillée.

@@ -1,0 +1,176 @@
+---
+title: Validation
+description: Validation des requêtes avec defineHandler et Standard Schema.
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+`defineHandler` enveloppe un handler de route pour ajouter la validation de schéma et l'inférence de types. Il accepte n'importe quelle bibliothèque qui implémente la spec [Standard Schema](https://standardschema.dev/) — Zod, Valibot et ArkType fonctionnent tous nativement.
+
+## Utilisation de base
+
+```ts
+import { defineHandler } from 'lacis'
+import { z } from 'zod'
+
+export const GET = defineHandler({
+  params: z.object({ id: z.string().uuid() }),
+  query: z.object({ verbose: z.coerce.boolean().optional() }),
+  meta: { summary: 'Obtenir un utilisateur par ID', tags: ['users'] },
+  handler: async (req, res) => {
+    req.params.id      // string — validé et typé
+    req.query.verbose  // boolean | undefined — validé et typé
+    res.json({ id: req.params.id })
+  },
+})
+```
+
+La valeur retournée est une fonction async classique — exportez-la comme tout autre handler de route.
+
+## Champs de configuration
+
+### `params`, `query`, `body`
+
+Chaque champ accepte un Standard Schema. Les schémas sont validés dans l'ordre : `params` en premier, puis `query`, puis `body`. Si l'un échoue, Lacis retourne `400` immédiatement.
+
+- `params` — validé contre `req.params` (paramètres de chemin URL)
+- `query` — validé contre `req.query` (query string parsée)
+- `body` — Lacis appelle `req.json()` en interne et valide le résultat
+
+### `meta`
+
+Attaché à l'opération OpenAPI lors de la génération du spec. Sans effet au moment de la requête.
+
+```ts
+meta: {
+  summary: 'Créer un utilisateur',
+  description: 'Crée un nouveau compte utilisateur.',
+  tags: ['users'],
+  deprecated: false,
+}
+```
+
+### `handler`
+
+Le handler de requête avec `req` et `res` entièrement typés.
+
+## Erreurs de validation
+
+Quand la validation échoue, Lacis envoie un `400` automatiquement :
+
+```json
+{
+  "error": "Validation failed",
+  "issues": [
+    { "message": "Invalid uuid", "path": ["id"] }
+  ]
+}
+```
+
+Le handler n'est jamais appelé en cas d'échec de validation.
+
+## Coercition des query strings
+
+Les query strings sont toujours des chaînes. Utilisez les utilitaires de coercition de votre validateur :
+
+<Tabs>
+<TabItem label="Zod">
+```ts
+query: z.object({
+  page: z.coerce.number().int().positive(),
+  active: z.coerce.boolean().optional(),
+})
+```
+</TabItem>
+<TabItem label="Valibot">
+```ts
+import * as v from 'valibot'
+
+query: v.object({
+  page: v.pipe(v.string(), v.transform(Number), v.integer()),
+  active: v.optional(v.pipe(v.string(), v.transform((s) => s === 'true'))),
+})
+```
+</TabItem>
+<TabItem label="ArkType">
+```ts
+import { type } from 'arktype'
+
+query: type({ page: 'number.integer > 0', 'active?': 'boolean' })
+```
+</TabItem>
+</Tabs>
+
+## Validation du body
+
+<Tabs>
+<TabItem label="Zod">
+```ts
+import { defineHandler } from 'lacis'
+import { z } from 'zod'
+
+export const POST = defineHandler({
+  body: z.object({
+    name: z.string().min(1),
+    email: z.string().email(),
+  }),
+  meta: { summary: 'Créer un utilisateur', tags: ['users'] },
+  handler: async (req, res) => {
+    const { name, email } = req.body  // entièrement typé
+    res.status(201).json({ name, email })
+  },
+})
+```
+</TabItem>
+<TabItem label="Valibot">
+```ts
+import { defineHandler } from 'lacis'
+import * as v from 'valibot'
+
+export const POST = defineHandler({
+  body: v.object({
+    name: v.pipe(v.string(), v.minLength(1)),
+    email: v.pipe(v.string(), v.email()),
+  }),
+  meta: { summary: 'Créer un utilisateur', tags: ['users'] },
+  handler: async (req, res) => {
+    const { name, email } = req.body
+    res.status(201).json({ name, email })
+  },
+})
+```
+</TabItem>
+<TabItem label="ArkType">
+```ts
+import { defineHandler } from 'lacis'
+import { type } from 'arktype'
+
+export const POST = defineHandler({
+  body: type({ name: 'string > 0', email: 'string.email' }),
+  meta: { summary: 'Créer un utilisateur', tags: ['users'] },
+  handler: async (req, res) => {
+    const { name, email } = req.body
+    res.status(201).json({ name, email })
+  },
+})
+```
+</TabItem>
+</Tabs>
+
+## Schémas combinés
+
+```ts
+export const PUT = defineHandler({
+  params: z.object({ id: z.string().uuid() }),
+  query: z.object({ dryRun: z.coerce.boolean().default(false) }),
+  body: z.object({ name: z.string(), email: z.string().email() }),
+  handler: async (req, res) => {
+    if (req.query.dryRun) return res.json({ ok: true, dry: true })
+    res.json({ id: req.params.id, ...req.body })
+  },
+})
+```
+
+## Inférence de types
+
+TypeScript infère les types de sortie de vos schémas. Modifiez un schéma et les types dans `handler` se mettent à jour automatiquement — aucune annotation manuelle nécessaire.

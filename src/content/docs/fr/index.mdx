@@ -1,0 +1,38 @@
+---
+title: Lacis
+description: Framework web TypeScript sans dépendances avec routage basé sur les fichiers.
+template: splash
+hero:
+  tagline: Routage par fichiers. Zéro dépendance. Node, Bun, Vercel, Netlify.
+  actions:
+    - text: Démarrer
+      link: /fr/getting-started/
+      icon: right-arrow
+    - text: GitHub
+      link: https://github.com/getlacis/lacis
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid stagger>
+  <Card title="Zéro dépendance" icon="approve-check">
+    Aucune dépendance à l'exécution. Lacis se distribue en un seul package, sans rien de superflu.
+  </Card>
+  <Card title="Routage par fichiers" icon="document">
+    Ajoutez un fichier dans `routes/` et il devient un endpoint. Aucune configuration requise.
+  </Card>
+  <Card title="Multi-plateforme" icon="laptop">
+    Une seule base de code, quatre cibles : Node.js, Bun, Vercel et Netlify via des adaptateurs dédiés.
+  </Card>
+  <Card title="Validation Standard Schema" icon="approve-check-circle">
+    Utilisez le validateur de votre choix — Zod, Valibot ou ArkType. Inférence de types complète incluse.
+  </Card>
+  <Card title="Tout inclus" icon="setting">
+    CORS, rate limiting, cache de réponse, SSE et génération OpenAPI prêts à l'emploi.
+  </Card>
+  <Card title="TypeScript avant tout" icon="seti:typescript">
+    Objets Request et Response entièrement typés. Pas de cast, pas de `any`.
+  </Card>
+</CardGrid>

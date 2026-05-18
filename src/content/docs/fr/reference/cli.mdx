@@ -1,0 +1,48 @@
+---
+title: CLI
+description: Référence du CLI Lacis — build, watch, dev.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Le CLI `lacis` est inclus avec le package `lacis`. Il fournit des commandes pour builder et développer votre projet.
+
+## `lacis build`
+
+Génère le manifest de routes requis pour les déploiements serverless (Vercel, Netlify).
+
+```bash
+lacis build
+```
+
+Cette commande scanne votre répertoire `routes/` et produit `routes/_manifest.ts` — un fichier avec des imports statiques pour chaque handler de route. Les adaptateurs serverless importent ce manifest à l'exécution au lieu de scanner le système de fichiers.
+
+**Quand l'utiliser :** Toujours avant de déployer sur Vercel ou Netlify.
+
+<Aside>
+Les déploiements Node.js et Bun ne nécessitent **pas** `lacis build`. Ils scannent le répertoire de routes au démarrage via `loadRoutes()`.
+</Aside>
+
+## `lacis watch`
+
+Surveille votre répertoire `routes/` et régénère le manifest quand un fichier est ajouté, supprimé ou renommé.
+
+```bash
+lacis watch
+```
+
+Utile en développement sur Vercel ou Netlify pour garder le manifest synchronisé quand vous ajoutez des routes.
+
+## `lacis dev`
+
+Lance un serveur de développement local pour les projets Vercel et Netlify.
+
+```bash
+lacis dev
+```
+
+<Aside type="caution">
+`lacis dev` est **uniquement pour Vercel et Netlify**. Pour Node.js et Bun, utilisez la commande dev native de votre `package.json` :
+- Node.js : `npm run dev` → exécute `tsx watch server.ts`
+- Bun : `bun run dev` → exécute `bun --watch server.ts`
+</Aside>

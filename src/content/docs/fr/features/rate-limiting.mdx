@@ -1,0 +1,67 @@
+---
+title: Rate Limiting
+description: Limitation de débit intégrée dans Lacis.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Configuration
+
+Passez un middleware de rate limiting à `createServer` pour l'appliquer globalement :
+
+```ts
+import { createServer } from 'lacis'
+import { createRateLimit } from 'lacis'
+
+createServer('./routes', {
+  middleware: {
+    beforeRequest: createRateLimit({ windowMs: 60_000, max: 100 }),
+  },
+})
+```
+
+Ou limitez-le à une route spécifique via un fichier middleware :
+
+```ts
+// routes/api/+middleware.ts
+import { createRateLimit } from 'lacis'
+
+export const beforeRequest = createRateLimit({ windowMs: 60_000, max: 20 })
+```
+
+## Options
+
+| Option | Type | Défaut | Description |
+|---|---|---|---|
+| `windowMs` | `number` | `60000` | Fenêtre de temps en millisecondes |
+| `max` | `number` | `100` | Nombre max de requêtes par fenêtre et par clé |
+| `message` | `string` | `'Too Many Requests'` | Message d'erreur dans la réponse 429 |
+| `keyGenerator` | `(req) => string` | Premier IP de `X-Forwarded-For`, ou `socket.remoteAddress` | Fonction pour identifier le requêteur |
+
+## Headers de réponse
+
+Chaque réponse inclut :
+
+| Header | Description |
+|---|---|
+| `X-RateLimit-Limit` | Le `max` configuré |
+| `X-RateLimit-Remaining` | Requêtes restantes dans la fenêtre courante |
+| `X-RateLimit-Reset` | Timestamp Unix (secondes) de réinitialisation de la fenêtre |
+
+Quand la limite est dépassée, une réponse `429 Too Many Requests` est envoyée avec un header `Retry-After` supplémentaire indiquant les secondes avant la réinitialisation.
+
+## Clé personnalisée
+
+Par défaut, le rate limiter utilise l'IP du client. Utilisez `keyGenerator` pour clé par utilisateur, token API ou tout autre identifiant :
+
+```ts
+createRateLimit({
+  windowMs: 60_000,
+  max: 1000,
+  keyGenerator: (req) => req.getHeader('x-api-key') ?? req.connection.remoteAddress ?? 'unknown',
+})
+```
+
+<Aside>
+Le rate limiter utilise un store en mémoire. Il n'est pas partagé entre les workers du cluster ni entre plusieurs instances de serveur. Pour un rate limiting distribué, implémentez votre propre middleware basé sur Redis ou un store similaire.
+</Aside>

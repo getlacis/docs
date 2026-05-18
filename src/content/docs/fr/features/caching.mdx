@@ -1,0 +1,77 @@
+---
+title: Caching
+description: Cache de réponses HTTP dans Lacis.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Lacis fournit deux APIs de cache : basée sur un middleware (`createResponseCache`) et par enveloppement de handler (`withCache`).
+
+## Approche middleware
+
+`createResponseCache` enregistre un middleware qui met en cache les réponses avant qu'elles soient envoyées. Appliquez-le globalement ou par route.
+
+```ts
+import { createServer } from 'lacis'
+import { createResponseCache } from 'lacis'
+
+createServer('./routes', {
+  middleware: {
+    beforeRequest: createResponseCache({ ttl: 60 }),
+  },
+})
+```
+
+### Options
+
+| Option | Type | Défaut | Description |
+|---|---|---|---|
+| `ttl` | `number` | requis | Durée du cache en **secondes** |
+| `methods` | `string[]` | `['GET', 'HEAD']` | Méthodes HTTP à cacher |
+| `maxSize` | `number` | `500` | Entrées max avant éviction LRU |
+| `keyGenerator` | `(req) => string` | `METHOD:URL` | Fonction de clé de cache |
+| `match` | `(req) => boolean` | — | Ne cache que si cette fonction retourne `true` |
+| `exclude` | `string \| string[]` | — | Préfixes de chemin à ignorer |
+| `shouldCache` | `(req, res) => boolean` | Codes 2xx | Si la réponse doit être stockée |
+
+### Exclusions
+
+```ts
+createResponseCache({
+  ttl: 60,
+  exclude: ['/admin', '/api/private'],
+})
+```
+
+## Enveloppement de handler
+
+`withCache` enveloppe un handler individuel. Utile quand vous voulez le cache sur une seule route sans middleware global.
+
+```ts
+import { withCache } from 'lacis'
+import type { Request, Response } from 'lacis'
+
+export const GET = withCache(
+  { ttl: 300 },
+  async (req: Request, res: Response) => {
+    const data = await fetchExpensiveData()
+    res.json(data)
+  }
+)
+```
+
+### Options
+
+| Option | Type | Défaut | Description |
+|---|---|---|---|
+| `ttl` | `number` | requis | Durée du cache en **secondes** |
+| `maxSize` | `number` | `500` | Entrées max avant éviction LRU |
+| `key` | `(req) => string` | `METHOD:URL` | Fonction de clé de cache |
+
+## Éviction LRU
+
+Quand `maxSize` est atteint, les 50 entrées les moins récemment utilisées sont évincées d'un coup. Les entrées expirent aussi individuellement selon le `ttl`.
+
+<Aside>
+Les réponses SSE (`text/event-stream`) et les réponses qui définissent un `Set-Cookie` ne sont **jamais mises en cache**, quelle que soit la configuration.
+</Aside>

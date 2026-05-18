@@ -91,6 +91,21 @@ The generated JSON is standard OpenAPI 3.1.0 — drop it into any compatible too
 
 **Postman / Insomnia**: use "Import from URL" → `http://localhost:3000/openapi.json`.
 
+**OpenAPI Generator**: generate clients, SDKs, or server stubs in 50+ languages from the spec.
+
+```bash
+# Install
+npm install @openapitools/openapi-generator-cli -g
+
+# Generate a TypeScript fetch client
+openapi-generator-cli generate \
+  -i http://localhost:3000/openapi.json \
+  -g typescript-fetch \
+  -o ./generated/client
+```
+
+See the [OpenAPI Generator docs](https://openapi-generator.tech/docs/installation/) for all supported generators and options.
+
 ## Routes without `defineHandler`
 
 Plain handlers appear in the spec with a minimal operation. Add `defineHandler` + `meta` to get richer output.

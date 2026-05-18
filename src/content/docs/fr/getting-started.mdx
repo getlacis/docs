@@ -1,0 +1,67 @@
+---
+title: Démarrage rapide
+description: Créez votre premier projet Lacis en quelques minutes.
+---
+
+import { Steps, FileTree, Aside } from '@astrojs/starlight/components';
+
+<Steps>
+
+1. **Créer un projet**
+
+   Lancez le CLI de scaffolding interactif :
+
+   ```bash
+   npm create lacis@latest
+   ```
+
+   Vous serez invité à choisir :
+   - **Nom du projet** — nom du répertoire créé
+   - **Plateforme** — Node.js, Bun, Vercel ou Netlify
+   - **Bibliothèque de validation** — Zod, Valibot, ArkType ou aucune
+
+2. **Entrer dans le projet**
+
+   ```bash
+   cd my-app
+   ```
+
+   Votre projet ressemble à ça (exemple Node.js) :
+
+   <FileTree>
+   - my-app/
+     - routes/
+       - index.ts
+     - server.ts
+     - package.json
+     - tsconfig.json
+   </FileTree>
+
+3. **Lancer le serveur de développement**
+
+   ```bash
+   npm run dev
+   ```
+
+   Votre serveur tourne sur `http://localhost:3000`.
+
+</Steps>
+
+## Votre première route
+
+Le fichier `routes/index.ts` généré exporte des handlers HTTP par méthode :
+
+```ts
+import type { Request, Response } from 'lacis'
+
+export const GET = async (_req: Request, res: Response) => {
+  res.status(200).json({ message: 'Hello from lacis!' })
+}
+```
+
+Chaque fichier dans `routes/` correspond à un chemin URL. Ajoutez un export `POST` dans le même fichier, ou créez `routes/users/index.ts` pour `/users`.
+
+## Étapes suivantes
+
+- [Routage](/fr/core/routing/) — comment les fichiers correspondent aux routes
+- [Validation](/fr/features/validation/) — validation des requêtes avec `defineHandler`

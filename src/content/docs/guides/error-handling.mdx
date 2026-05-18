@@ -1,0 +1,136 @@
+---
+title: Error Handling
+description: Built-in HTTP error helpers and global error handling in Lacis.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Lacis exports typed HTTP error constructors and a `sendError` helper. Use them to send consistent, properly-formatted error responses without writing `res.status(...).json(...)` by hand.
+
+## Built-in error constructors
+
+```ts
+import {
+  createBadRequestError,         // 400
+  createUnauthorizedError,       // 401
+  createForbiddenError,          // 403
+  createNotFoundError,           // 404
+  createConflictError,           // 409
+  createValidationError,         // 422
+  createInternalServerError,     // 500
+  createServiceUnavailableError, // 503
+  createGatewayTimeoutError,     // 504
+} from 'lacis'
+```
+
+Each accepts an optional `message` and `details` object:
+
+```ts
+createNotFoundError('User not found', { id: req.params.id })
+```
+
+## Throwing errors
+
+The simplest pattern: `throw` any error constructor and Lacis will send the correct status code automatically.
+
+```ts
+import type { Request, Response } from 'lacis'
+import { createUnauthorizedError, createNotFoundError } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  const token = req.getHeader('authorization')
+  if (!token) throw createUnauthorizedError('Missing token')
+
+  const user = await db.findUser(req.params.id)
+  if (!user) throw createNotFoundError('User not found', { id: req.params.id })
+
+  res.json(user)
+}
+```
+
+## `sendError`
+
+An alternative to throwing — sends the error as JSON and sets the correct status code inline. Useful when you need to send an error and then do cleanup work before returning.
+
+```ts
+import type { Request, Response } from 'lacis'
+import { sendError, createUnauthorizedError, createNotFoundError } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  const token = req.getHeader('authorization')
+  if (!token) {
+    sendError(createUnauthorizedError('Missing token'), res)
+    return
+  }
+
+  const user = await db.findUser(req.params.id)
+  if (!user) {
+    sendError(createNotFoundError('User not found', { id: req.params.id }), res)
+    return
+  }
+
+  res.json(user)
+}
+```
+
+The client receives:
+
+```json
+{ "error": "User not found", "code": 404, "details": { "id": "42" } }
+```
+
+<Aside>
+`sendError` checks `res.headersSent` before writing — safe to call even if you're not sure whether the response has already started.
+</Aside>
+
+## Details exposure
+
+- **4xx errors** — `details` are included in the response body (safe to expose to the client)
+- **5xx errors** — `details` are never sent to the client; the error is logged server-side
+
+```ts
+// ✅ details sent to client — 422
+sendError(createValidationError('Invalid input', { field: 'email' }), res)
+// → { "error": "Invalid input", "code": 422, "details": { "field": "email" } }
+
+// ✅ details NOT sent to client — 500
+sendError(createInternalServerError('DB query failed', { query: sql }), res)
+// → { "error": "Internal Server Error", "code": 500 }
+```
+
+## Global error handler
+
+Use the `onError` middleware hook to centralize logging or forward errors to an external service:
+
+```ts
+import { createServer, normalizeError, sendError } from 'lacis'
+
+createServer('./routes', {
+  middleware: {
+    onError: async (req, res, ctx) => {
+      const error = normalizeError(ctx.error)
+
+      // Forward to Sentry, Datadog, etc.
+      captureException(error)
+
+      if (!res.headersSent) {
+        sendError(error, res)
+      }
+    },
+  },
+})
+```
+
+## `normalizeError`
+
+Converts any unknown error into a typed `HttpError`. Useful in `onError` when you don't control the error source:
+
+```ts
+import { normalizeError } from 'lacis'
+
+const error = normalizeError(unknownErr)
+// ECONNREFUSED / ENOTFOUND → 503
+// ETIMEDOUT               → 504
+// { statusCode: 422 }     → 422
+// anything else           → 500
+```

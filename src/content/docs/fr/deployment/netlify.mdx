@@ -1,0 +1,103 @@
+---
+title: Netlify
+description: Déployer Lacis sur Netlify avec le netlifyAdapter et un manifest de routes pré-compilé.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+<Aside type="caution" title="Serverless — les routes doivent être pré-compilées">
+Les fonctions Netlify n'ont pas de système de fichiers persistant. Lacis ne peut pas scanner votre répertoire `routes/` au moment de la requête. Vous devez d'abord exécuter `lacis build` pour générer un manifest de routes.
+</Aside>
+
+## Différences avec Node/Bun
+
+| | Node / Bun | Vercel / Netlify |
+|---|---|---|
+| Config | chaîne `routesDir` | objet `ServerlessConfig` |
+| Découverte des routes | `loadRoutes()` au démarrage | Manifest pré-compilé |
+| Étape de build | Optionnelle | **Requise** (`lacis build`) |
+
+## Structure du projet
+
+```
+my-app/
+├── netlify/
+│   └── functions/
+│       └── api.ts       ← point d'entrée de la fonction Netlify
+├── routes/
+│   ├── users/
+│   │   └── index.ts
+│   └── posts/
+│       └── [id]/
+│           └── index.ts
+└── netlify.toml
+```
+
+## Handler de fonction
+
+```ts
+// netlify/functions/api.ts
+import { netlifyAdapter } from 'lacis/adapters'
+import { routes, middlewares } from '../../routes/_manifest.js'
+
+const handler = netlifyAdapter.createHandler({ routes, middlewares })
+
+export { handler }
+```
+
+## netlify.toml
+
+```toml
+[build]
+  command = "lacis build"
+  publish = "public"
+
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/api"
+  status = 200
+```
+
+Définir `command = "lacis build"` régénère le manifest de routes à chaque déploiement automatiquement.
+
+## Flux de déploiement
+
+<Steps>
+
+1. Installez les dépendances :
+
+   ```bash
+   npm install lacis @netlify/functions
+   ```
+
+2. Committez votre fonction et la config :
+
+   ```bash
+   git add netlify/ netlify.toml
+   git commit -m "add lacis netlify handler"
+   ```
+
+3. Déployez :
+
+   ```bash
+   netlify deploy --prod
+   ```
+
+   Netlify récupère la commande de build depuis `netlify.toml` et régénère le manifest automatiquement.
+
+</Steps>
+
+## Configuration optionnelle
+
+```ts
+const handler = netlifyAdapter.createHandler({
+  routes,
+  middlewares,
+  cors: { origin: 'https://monapp.com', credentials: true },
+  hooks: {
+    onNotFound: async (req, res) => {
+      res.status(404).json({ error: 'Non trouvé', path: req.url })
+    },
+  },
+})
+```

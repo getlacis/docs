@@ -1,0 +1,130 @@
+---
+title: Configuration
+description: Référence de la configuration serveur pour Lacis.
+---
+
+L'objet `ServerConfig` est passé comme second argument à `createServer` (pour Node/Bun) ou dans `ServerlessConfig` (pour Vercel/Netlify).
+
+## Options de premier niveau
+
+| Option | Type | Défaut | Description |
+|---|---|---|---|
+| `port` | `number` | `3000` | Port d'écoute |
+| `platform` | `'node' \| 'bun' \| 'vercel' \| 'netlify'` | `'node'` | Plateforme cible |
+| `isDev` | `boolean` | `NODE_ENV === 'development'` | Active le mode dev (erreurs détaillées, monitoring) |
+| `timeout` | `number` | `30000` | Timeout de requête en millisecondes |
+| `defaultHeaders` | `Record<string, string>` | — | Headers ajoutés à chaque réponse |
+
+## `httpsOptions`
+
+Configuration TLS pour HTTPS (Node.js uniquement).
+
+```ts
+httpsOptions: {
+  cert: readFileSync('./certs/cert.pem'),
+  key:  readFileSync('./certs/key.pem'),
+}
+```
+
+## `cors`
+
+Voir la page [CORS](/fr/features/cors/) pour toutes les options.
+
+```ts
+cors: {
+  origin: 'https://monapp.com',
+  credentials: true,
+  maxAge: 86400,
+}
+```
+
+## `middleware`
+
+Middleware global appliqué à chaque requête.
+
+```ts
+middleware: {
+  beforeRequest: async (req, res) => { /* ... */ },
+  afterRequest:  async (req, res) => { /* ... */ },
+  onError:       async (req, res, ctx) => { /* ... */ },
+}
+```
+
+Chaque propriété accepte un handler unique ou un tableau de handlers.
+
+## `hooks`
+
+Hooks de cycle de vie du serveur.
+
+```ts
+hooks: {
+  onNotFound: async (req, res) => {
+    res.status(404).json({ error: 'Non trouvé' })
+  },
+  onShutdown: async () => {
+    await db.end()
+  },
+}
+```
+
+| Hook | Quand il s'exécute |
+|---|---|
+| `onNotFound` | Aucune route ne correspond à la requête |
+| `onShutdown` | Réception de `SIGINT`, `SIGTERM` ou `SIGHUP` |
+
+## `cluster`
+
+Clustering multi-processus (Node.js et Bun).
+
+```ts
+cluster: {
+  enabled: false,          // défaut
+  workers: undefined,      // défaut : os.cpus().length
+}
+```
+
+## `monitoring`
+
+Monitoring de performances en développement (Node.js uniquement, nécessite `isDev: true`).
+
+```ts
+monitoring: {
+  enabled: false,           // défaut
+  sampleInterval: 5000,    // ms entre les échantillons
+  reportInterval: 60000,   // ms entre les rapports console
+  thresholds: {
+    cpu: 80,               // % — déclenche une alerte
+    memory: 512,           // Mo
+    responseTime: 500,     // ms
+    errorRate: 5,          // %
+  },
+}
+```
+
+Quand activé, un endpoint `/health` retourne les métriques en temps réel en JSON.
+
+## `routes`
+
+Manifest de routes pré-compilé (plateformes serverless uniquement). Généré par `lacis build`.
+
+```ts
+import { routes, middlewares } from './routes/_manifest.js'
+
+// Passé à vercelAdapter ou netlifyAdapter
+vercelAdapter.createHandler({ routes, middlewares })
+```
+
+## `openapi`
+
+Génération de la spec OpenAPI.
+
+```ts
+openapi: {
+  path: '/openapi.json',
+  info: {
+    title: 'Mon API',
+    version: '1.0.0',
+    description: 'Description optionnelle.',
+  },
+}
+```

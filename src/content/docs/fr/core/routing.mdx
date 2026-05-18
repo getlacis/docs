@@ -1,0 +1,185 @@
+---
+title: Routage
+description: Routage par fichiers dans Lacis — correspondance fichiers/URLs, méthodes HTTP, segments dynamiques et wildcards.
+---
+
+import { FileTree, Aside } from '@astrojs/starlight/components';
+
+Lacis génère les routes automatiquement depuis votre répertoire `routes/`. Chaque fichier `index.ts` dans ce répertoire devient un endpoint — aucune déclaration manuelle n'est nécessaire.
+
+## Structure des répertoires
+
+Placez vos fichiers de routes sous `routes/`. La hiérarchie des dossiers correspond directement aux chemins URL.
+
+<FileTree>
+- routes/
+  - index.ts           → GET /
+  - users/
+    - index.ts         → /users
+    - [id]/
+      - index.ts       → /users/:id
+  - posts/
+    - index.ts         → /posts
+    - [slug]/
+      - index.ts       → /posts/:slug
+</FileTree>
+
+<Aside>
+Seuls les fichiers `index.ts` (ou `index.js`) sont traités comme des handlers de route. Les autres fichiers du répertoire sont ignorés — vous pouvez y coloquer utilitaires, types et helpers librement.
+</Aside>
+
+## Exports de méthodes HTTP
+
+Exportez des fonctions nommées correspondant aux méthodes HTTP en majuscules. Chaque export gère cette méthode pour l'URL du fichier.
+
+```ts
+// routes/users/index.ts → /users
+import type { Request, Response } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  res.json({ users: [] })
+}
+
+export async function POST(req: Request, res: Response) {
+  const body = await req.json()
+  res.status(201).json({ created: body })
+}
+
+export async function PUT(req: Request, res: Response) {
+  const body = await req.json()
+  res.json({ updated: body })
+}
+
+export async function PATCH(req: Request, res: Response) {
+  const body = await req.json()
+  res.json({ patched: body })
+}
+
+export async function DELETE(req: Request, res: Response) {
+  res.status(204).send('')
+}
+```
+
+Méthodes supportées : `GET`, `POST`, `PUT`, `PATCH`, `DELETE`.
+
+## Segments dynamiques
+
+Entourez un nom de répertoire de crochets pour en faire un paramètre d'URL. Le nom du paramètre est le texte entre les crochets.
+
+<FileTree>
+- routes/
+  - users/
+    - [id]/
+      - index.ts    → /users/:id
+  - orgs/
+    - [orgId]/
+      - teams/
+        - [teamId]/
+          - index.ts  → /orgs/:orgId/teams/:teamId
+</FileTree>
+
+Accédez aux paramètres via `req.params` :
+
+```ts
+// routes/users/[id]/index.ts → /users/:id
+import type { Request, Response } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  const { id } = req.params
+  res.json({ id })
+}
+```
+
+<Aside type="caution">
+Les segments statiques ont la priorité sur les segments dynamiques. Une requête vers `/users/settings` correspond à `routes/users/settings/index.ts` avant `routes/users/[id]/index.ts`.
+</Aside>
+
+## Routes imbriquées
+
+Imbriquez des répertoires pour créer des chemins URL imbriqués. Chaque niveau peut avoir son propre `index.ts` avec des handlers indépendants.
+
+<FileTree>
+- routes/
+  - api/
+    - index.ts              → /api
+    - users/
+      - index.ts            → /api/users
+      - [id]/
+        - index.ts          → /api/users/:id
+        - posts/
+          - index.ts        → /api/users/:id/posts
+</FileTree>
+
+```ts
+// routes/api/users/[id]/posts/index.ts → /api/users/:id/posts
+import type { Request, Response } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  const { id } = req.params
+  res.json({ userId: id, posts: [] })
+}
+```
+
+## Routes wildcard
+
+Utilisez un répertoire nommé `[...]` pour capturer tous les segments de chemin restants.
+
+<FileTree>
+- routes/
+  - files/
+    - [...path]/
+      - index.ts    → /files/*
+</FileTree>
+
+```ts
+// routes/files/[...path]/index.ts
+import type { Request, Response } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  const filePath = req.params.path
+  res.json({ path: filePath })
+}
+```
+
+## Method Not Allowed
+
+Quand une route existe mais que la requête utilise une méthode HTTP non déclarée, Lacis retourne `405 Method Not Allowed` et ajoute automatiquement un header `Allow` listant les méthodes supportées.
+
+## Exemple complet
+
+```ts
+// routes/index.ts → GET /
+import type { Request, Response } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  res.json({ name: 'My API', version: '1.0.0' })
+}
+```
+
+```ts
+// routes/users/index.ts → /users
+import type { Request, Response } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  res.json({ users: [] })
+}
+
+export async function POST(req: Request, res: Response) {
+  const body = await req.json<{ name: string; email: string }>()
+  res.status(201).json({ id: crypto.randomUUID(), ...body })
+}
+```
+
+```ts
+// routes/users/[id]/index.ts → /users/:id
+import type { Request, Response } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  const { id } = req.params
+  res.json({ id, name: 'Alice' })
+}
+
+export async function DELETE(req: Request, res: Response) {
+  res.status(204).send('')
+}
+```

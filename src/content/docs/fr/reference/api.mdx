@@ -1,0 +1,212 @@
+---
+title: Référence API
+description: Référence complète des exports de Lacis.
+---
+
+## `createServer(routesDir, config?)`
+
+Crée et démarre un serveur Lacis. Utilisé avec les adaptateurs Node.js et Bun.
+
+```ts
+import { createServer } from 'lacis'
+
+createServer('./routes', { port: 3000 })
+```
+
+Voir [Configuration](/fr/reference/configuration/) pour toutes les options.
+
+---
+
+## `defineHandler(config)`
+
+Enveloppe un handler de route avec la validation de schéma, l'inférence de types et les métadonnées OpenAPI.
+
+```ts
+import { defineHandler } from 'lacis'
+
+defineHandler({
+  params?: StandardSchema,
+  query?: StandardSchema,
+  body?: StandardSchema,
+  meta?: {
+    summary?: string
+    description?: string
+    tags?: string[]
+    deprecated?: boolean
+  },
+  cache?: WithCacheOptions,
+  handler: (req, res) => void | Promise<void>,
+})
+```
+
+Retourne une fonction async typée `(req, res) => Promise<void>`.
+
+---
+
+## `createCorsMiddleware(config)`
+
+Crée une fonction middleware CORS.
+
+```ts
+import { createCorsMiddleware } from 'lacis'
+
+createCorsMiddleware({
+  origin?: string | string[] | RegExp | ((origin: string) => boolean) | '*',
+  methods?: string[],
+  allowedHeaders?: string[],
+  exposedHeaders?: string[],
+  credentials?: boolean,
+  maxAge?: number,
+})
+```
+
+Retourne un `MiddlewareCallback`. Voir [CORS](/fr/features/cors/).
+
+---
+
+## `createRateLimit(options?)`
+
+Crée un middleware de rate limiting.
+
+```ts
+import { createRateLimit } from 'lacis'
+
+createRateLimit({
+  windowMs?: number,      // défaut : 60000
+  max?: number,           // défaut : 100
+  message?: string,
+  keyGenerator?: (req: Request) => string,
+})
+```
+
+Retourne un `MiddlewareCallback`. Voir [Rate Limiting](/fr/features/rate-limiting/).
+
+---
+
+## `createResponseCache(options)`
+
+Crée un middleware de cache de réponses.
+
+```ts
+import { createResponseCache } from 'lacis'
+
+createResponseCache({
+  ttl: number,            // secondes, requis
+  methods?: string[],     // défaut : ['GET', 'HEAD']
+  maxSize?: number,       // défaut : 500
+  keyGenerator?: (req: Request) => string,
+  match?: (req: Request) => boolean,
+  exclude?: string | string[],
+  shouldCache?: (req: Request, res: Response) => boolean,
+})
+```
+
+Retourne un `MiddlewareCallback`. Voir [Caching](/fr/features/caching/).
+
+---
+
+## `withCache(options, handler)`
+
+Enveloppe un handler unique avec le cache de réponses.
+
+```ts
+import { withCache } from 'lacis'
+
+withCache(
+  { ttl: number, maxSize?: number, key?: (req: Request) => string },
+  async (req, res) => { /* ... */ }
+)
+```
+
+Retourne `(req: Request, res: Response) => Promise<void>`.
+
+---
+
+## `initSSE(res, options?)`
+
+Initialise une connexion Server-Sent Events. Retourne un `SSEContext`.
+
+```ts
+import { initSSE } from 'lacis'
+
+// Généralement appelé via res.initSSE() dans les handlers de route
+const sse = res.initSSE({
+  timeout?: number,   // défaut : 300000 (5 min)
+  headers?: Record<string, string>,
+})
+```
+
+---
+
+## `SSEContext`
+
+Retourné par `res.initSSE()`.
+
+| Méthode | Signature | Description |
+|---|---|---|
+| `send` | `(data: string) => boolean` | Envoie une ligne de données brute |
+| `json` | `(data: any) => boolean` | Envoie des données JSON |
+| `event` | `(event: string, data: any) => boolean` | Envoie un événement nommé |
+| `comment` | `(text: string) => boolean` | Envoie un commentaire |
+| `id` | `(id: string) => boolean` | Définit l'ID de l'événement |
+| `retry` | `(ms: number) => boolean` | Définit le délai de reconnexion |
+| `close` | `(comment?: string) => void` | Ferme gracieusement |
+| `error` | `(event, message, code?, details?) => void` | Envoie une erreur et ferme |
+
+---
+
+## `createSSEClient(url, options?, handlers?)`
+
+Crée une connexion SSE côté client.
+
+```ts
+import { createSSEClient } from 'lacis'
+
+const client = await createSSEClient(url, {
+  method?: string,
+  body?: string,
+  contentType?: string,
+  reconnectInterval?: number,   // défaut : 3000
+  maxRetries?: number,          // défaut : 3
+  disableReconnect?: boolean,
+}, {
+  onMessage?: (data: any) => void,
+  onEvent?: Record<string, (data: any) => void>,
+  onClose?: () => void,
+  onError?: (error: Error) => void,
+})
+```
+
+---
+
+## Types TypeScript
+
+```ts
+import type {
+  // Request / Response
+  Request,
+  Response,
+
+  // Configuration
+  ServerConfig,
+  ServerlessConfig,
+  CorsConfig,
+
+  // Middleware
+  MiddlewareCallback,
+  MiddlewareHooks,
+
+  // SSE
+  SSEOptions,
+  SSEClientOptions,
+  SSEEventHandlers,
+  SSEClient,
+
+  // Adaptateurs
+  Adapter,
+
+  // Monitoring
+  MonitorOptions,
+  HealthMetrics,
+} from 'lacis'
+```

@@ -1,0 +1,172 @@
+---
+title: Testing
+description: How to test Lacis route handlers with supertest.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Lacis routes are plain async functions — they're easy to test. The recommended approach is to spin up a real server on a random port with your handlers passed inline, then hit it with `supertest`.
+
+## Setup
+
+Install `supertest`:
+
+```bash
+npm install -D supertest @types/supertest
+```
+
+## Test helper
+
+Create a small helper that wraps `createServer` with a random port:
+
+```ts
+// tests/helpers/server.ts
+import supertest from 'supertest'
+import { createServer } from 'lacis'
+import type { ServerlessRoute, ServerConfig } from 'lacis'
+import type { Server } from 'http'
+
+export async function createTestApp(options: {
+  routes: ServerlessRoute[]
+  middleware?: ServerConfig['middleware']
+  hooks?: ServerConfig['hooks']
+}) {
+  const server = await createServer('', {
+    platform: 'node',
+    port: 0,          // random available port
+    cluster: { enabled: false },
+    routes: options.routes,
+    middleware: options.middleware,
+    hooks: options.hooks,
+  }) as Server
+
+  const { port } = server.address() as { port: number }
+
+  return {
+    request: supertest.agent(`http://localhost:${port}`),
+    close: () => new Promise<void>((resolve, reject) =>
+      server.close(err => err ? reject(err) : resolve())
+    ),
+  }
+}
+```
+
+## Writing tests
+
+Import your handlers directly and pass them as `routes`:
+
+```ts
+// tests/users.test.ts
+import { createTestApp } from './helpers/server'
+import { GET, POST } from '../routes/users/index'
+
+describe('GET /users', () => {
+  it('returns a list of users', async () => {
+    const { request, close } = await createTestApp({
+      routes: [{ path: '/users', handlers: { GET, POST } }],
+    })
+
+    await request.get('/users')
+      .expect(200)
+      .expect(res => {
+        expect(Array.isArray(res.body.users)).toBe(true)
+      })
+
+    await close()
+  })
+})
+```
+
+## Testing with params
+
+```ts
+import { GET } from '../routes/users/[id]/index'
+
+it('returns a user by id', async () => {
+  const { request, close } = await createTestApp({
+    routes: [{ path: '/users/:id', handlers: { GET } }],
+  })
+
+  await request.get('/users/123').expect(200).expect({ id: '123' })
+  await close()
+})
+```
+
+## Testing with body
+
+```ts
+import { POST } from '../routes/users/index'
+
+it('creates a user', async () => {
+  const { request, close } = await createTestApp({
+    routes: [{ path: '/users', handlers: { POST } }],
+  })
+
+  await request
+    .post('/users')
+    .send({ name: 'Alice', email: 'alice@example.com' })
+    .expect(201)
+
+  await close()
+})
+```
+
+## Testing middleware
+
+Pass middleware directly — no file loading needed:
+
+```ts
+import { createUnauthorizedError } from 'lacis'
+
+it('rejects requests without a token', async () => {
+  const { request, close } = await createTestApp({
+    routes: [{ path: '/protected', handlers: { GET: async (_req, res) => res.json({ ok: true }) } }],
+    middleware: {
+      beforeRequest: async (req, res) => {
+        if (!req.getHeader('authorization')) {
+          throw createUnauthorizedError()
+        }
+      },
+    },
+  })
+
+  await request.get('/protected').expect(401)
+  await request.get('/protected').set('Authorization', 'Bearer token').expect(200)
+
+  await close()
+})
+```
+
+## Testing cookies
+
+```ts
+it('sets a session cookie on login', async () => {
+  const { request, close } = await createTestApp({
+    routes: [{
+      path: '/login',
+      handlers: {
+        POST: async (_req, res) => {
+          res.cookies.set('session', 'abc123', { httpOnly: true })
+          res.json({ ok: true })
+        },
+      },
+    }],
+  })
+
+  const res = await request.post('/login').expect(200)
+  expect(res.headers['set-cookie'][0]).toContain('session=abc123')
+  expect(res.headers['set-cookie'][0]).toContain('HttpOnly')
+
+  await close()
+})
+```
+
+<Aside>
+Use `afterEach` or `afterAll` to call `close()` and avoid open handle warnings in Jest/Vitest.
+
+```ts
+afterEach(async () => {
+  await close()
+})
+```
+</Aside>

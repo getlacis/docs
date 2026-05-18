@@ -1,0 +1,70 @@
+---
+title: CORS
+description: Configuration du partage de ressources cross-origin dans Lacis.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Configuration
+
+Passez un objet `cors` à `createServer` :
+
+```ts
+import { createServer } from 'lacis'
+
+createServer('./routes', {
+  cors: {
+    origin: 'https://monapp.com',
+    credentials: true,
+  },
+})
+```
+
+Ou utilisez `createCorsMiddleware` directement pour l'enregistrer comme middleware :
+
+```ts
+import { createCorsMiddleware } from 'lacis'
+
+export const beforeRequest = createCorsMiddleware({
+  origin: ['https://monapp.com', 'https://admin.monapp.com'],
+  credentials: true,
+})
+```
+
+## Options
+
+| Option | Type | Défaut | Description |
+|---|---|---|---|
+| `origin` | `string \| string[] \| RegExp \| ((origin: string) => boolean) \| '*'` | `'*'` | Origines autorisées |
+| `methods` | `string[]` | `['GET','POST','PUT','DELETE','PATCH','OPTIONS']` | Méthodes HTTP autorisées |
+| `allowedHeaders` | `string[]` | `['Content-Type','Authorization']` | Headers de requête autorisés |
+| `exposedHeaders` | `string[]` | — | Headers exposés au navigateur |
+| `credentials` | `boolean` | — | Autoriser les cookies / credentials |
+| `maxAge` | `number` | — | Durée de cache du preflight en secondes |
+
+## Formats d'origine
+
+```ts
+// Origine unique
+origin: 'https://monapp.com'
+
+// Origines multiples
+origin: ['https://monapp.com', 'https://admin.monapp.com']
+
+// RegExp
+origin: /\.monapp\.com$/
+
+// Fonction personnalisée
+origin: (origin) => origin.endsWith('.monapp.com')
+
+// Tout autoriser (défaut)
+origin: '*'
+```
+
+<Aside>
+Quand `credentials: true` est défini avec `origin: '*'`, Lacis reflète automatiquement le header `Origin` réel de la requête au lieu de répondre avec `*`. C'est exigé par la spec CORS — les navigateurs rejettent les requêtes avec credentials et une origine générique.
+</Aside>
+
+## Preflight
+
+Lacis gère les requêtes `OPTIONS` preflight automatiquement. Quand une requête preflight arrive, il répond avec `204` et les headers `Access-Control-Allow-*` appropriés, puis arrête tout traitement ultérieur.

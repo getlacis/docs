@@ -1,0 +1,121 @@
+---
+title: create-lacis
+description: Scaffolder un nouveau projet Lacis avec le CLI interactif.
+---
+
+import { FileTree, Tabs, TabItem } from '@astrojs/starlight/components';
+
+`create-lacis` est le CLI de scaffolding officiel. Il configure un nouveau projet Lacis avec la bonne structure, le point d'entrée et les dépendances pour votre plateforme cible.
+
+## Utilisation
+
+```bash
+npm create lacis@latest
+```
+
+## Questions posées
+
+Le CLI pose trois questions :
+
+1. **Nom du projet** — devient le nom du répertoire (lettres minuscules, chiffres, `-`, `_`, `.`)
+2. **Plateforme** — Node.js, Bun, Vercel ou Netlify
+3. **Bibliothèque de validation** — Zod, Valibot, ArkType ou aucune
+
+## Structure générée
+
+<Tabs>
+<TabItem label="Node.js">
+<FileTree>
+- my-app/
+  - routes/
+    - index.ts
+  - server.ts
+  - package.json
+  - tsconfig.json
+  - .gitignore
+</FileTree>
+
+```json
+// scripts package.json
+{
+  "dev": "tsx watch server.ts",
+  "build": "lacis build"
+}
+```
+</TabItem>
+<TabItem label="Bun">
+<FileTree>
+- my-app/
+  - routes/
+    - index.ts
+  - server.ts
+  - package.json
+  - tsconfig.json
+  - .gitignore
+</FileTree>
+
+```json
+// scripts package.json
+{
+  "dev": "bun --watch server.ts",
+  "build": "lacis build"
+}
+```
+</TabItem>
+<TabItem label="Vercel">
+<FileTree>
+- my-app/
+  - routes/
+    - index.ts
+  - api/
+    - slug.ts
+  - vercel.json
+  - package.json
+  - tsconfig.json
+  - .gitignore
+</FileTree>
+
+```json
+// scripts package.json
+{
+  "dev": "lacis dev",
+  "build": "lacis build"
+}
+```
+</TabItem>
+<TabItem label="Netlify">
+<FileTree>
+- my-app/
+  - routes/
+    - index.ts
+  - netlify/
+    - functions/
+      - api.ts
+  - netlify.toml
+  - package.json
+  - tsconfig.json
+  - .gitignore
+</FileTree>
+
+```json
+// scripts package.json
+{
+  "dev": "lacis dev",
+  "build": "lacis build"
+}
+```
+</TabItem>
+</Tabs>
+
+## Dépendances de validation
+
+Chaque choix de validateur ajoute les packages appropriés aux `dependencies` :
+
+| Choix | Packages ajoutés |
+|---|---|
+| Zod | `zod`, `zod-to-json-schema` |
+| Valibot | `valibot`, `@valibot/to-json-schema` |
+| ArkType | `arktype` |
+| Aucun | — |
+
+Les packages convertisseurs (`zod-to-json-schema`, `@valibot/to-json-schema`) sont nécessaires pour la génération de spec OpenAPI. Si vous ne prévoyez pas d'utiliser OpenAPI, vous pouvez les supprimer.

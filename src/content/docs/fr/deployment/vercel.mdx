@@ -1,0 +1,105 @@
+---
+title: Vercel
+description: Déployer Lacis sur Vercel avec le vercelAdapter et un manifest de routes pré-compilé.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+<Aside type="caution" title="Serverless — les routes doivent être pré-compilées">
+Les fonctions Vercel n'ont pas de système de fichiers persistant. Lacis ne peut pas scanner votre répertoire `routes/` au moment de la requête. Vous devez d'abord exécuter `lacis build` pour générer un manifest de routes.
+</Aside>
+
+## Différences avec Node/Bun
+
+| | Node / Bun | Vercel / Netlify |
+|---|---|---|
+| Config | chaîne `routesDir` | objet `ServerlessConfig` |
+| Découverte des routes | `loadRoutes()` au démarrage | Manifest pré-compilé |
+| Étape de build | Optionnelle | **Requise** (`lacis build`) |
+
+## Structure du projet
+
+```
+my-app/
+├── api/
+│   └── [...slug].ts     ← handler catch-all Vercel
+├── routes/
+│   ├── users/
+│   │   └── index.ts
+│   └── posts/
+│       └── [id]/
+│           └── index.ts
+└── vercel.json
+```
+
+## Handler API
+
+```ts
+// api/[...slug].ts
+import { vercelAdapter } from 'lacis/adapters'
+import { routes, middlewares } from '../routes/_manifest.js'
+
+const handler = vercelAdapter.createHandler({ routes, middlewares })
+
+export default handler
+```
+
+<Aside>
+`createHandler` initialise les routes, CORS, middleware et hooks une seule fois au premier appel, et met en cache le résultat pour les requêtes suivantes dans la même instance de fonction.
+</Aside>
+
+## vercel.json
+
+```json
+{
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/api/slug" }
+  ]
+}
+```
+
+## Flux de déploiement
+
+<Steps>
+
+1. Ajoutez `lacis build` à vos scripts dans `package.json` :
+
+   ```json
+   {
+     "scripts": {
+       "build": "lacis build"
+     }
+   }
+   ```
+
+2. Committez votre handler :
+
+   ```bash
+   git add api/ vercel.json
+   git commit -m "add lacis vercel handler"
+   ```
+
+3. Déployez :
+
+   ```bash
+   vercel deploy --prod
+   ```
+
+   Vercel exécute `lacis build` automatiquement à chaque déploiement, régénérant le manifest de routes.
+
+</Steps>
+
+## Configuration optionnelle
+
+```ts
+const handler = vercelAdapter.createHandler({
+  routes,
+  middlewares,
+  cors: { origin: 'https://monapp.com', credentials: true },
+  hooks: {
+    onNotFound: async (req, res) => {
+      res.status(404).json({ error: 'Non trouvé', path: req.url })
+    },
+  },
+})
+```

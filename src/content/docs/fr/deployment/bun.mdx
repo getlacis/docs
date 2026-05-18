@@ -1,0 +1,88 @@
+---
+title: Bun
+description: Déployer Lacis sur Bun avec le bunAdapter.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+<Aside type="tip" title="Serveur persistant">
+L'adaptateur Bun lance un serveur persistant via `Bun.serve()`. Il scanne votre répertoire `routes/` au démarrage — aucune étape de pré-compilation requise.
+</Aside>
+
+## Point d'entrée
+
+```ts
+// server.ts
+import { bunAdapter } from 'lacis/adapters'
+
+const createServer = bunAdapter.createHandler('./routes')
+
+createServer({
+  port: 3000,
+  isDev: process.env.NODE_ENV !== 'production',
+})
+```
+
+## Différences avec l'adaptateur Node
+
+- **Handler fetch natif** — les requêtes sont gérées comme des objets `Request`/`Response` standards, enveloppés dans des classes `BunRequest`/`BunResponse` légères
+- **TransformStream pour SSE** — `Bun.serve()` a besoin de la `Response` de façon synchrone, donc `initSSE()` doit être appelé avant le premier `await` dans votre handler
+- **Parsing JSON plus rapide** — délègue directement au parser JSON natif de Bun
+
+## Contrainte SSE
+
+```ts
+export async function GET(req, res) {
+  res.initSSE() // doit être avant tout await
+
+  const data = await fetchSomething()
+  // ...
+}
+```
+
+<Aside type="danger">
+Si `initSSE()` est appelé après un `await`, Lacis lève : `initSSE() must be called synchronously before any await in your handler`.
+</Aside>
+
+## Options de configuration
+
+| Option | Type | Défaut | Description |
+|---|---|---|---|
+| `port` | `number` | `3000` | Port d'écoute |
+| `isDev` | `boolean` | `false` | Active le mode développement |
+| `defaultHeaders` | `Record<string, string>` | — | Headers ajoutés à chaque réponse |
+| `cluster` | `object` | — | Multi-worker via `reusePort` |
+| `cors` | `CorsConfig` | — | Politique CORS |
+| `middleware` | `object` | — | Hooks `beforeRequest`, `afterRequest`, `onError` |
+| `hooks` | `object` | — | Hooks `onNotFound`, `onShutdown` |
+
+## Mode cluster
+
+Lacis spawn des processus workers avec `Bun.spawn()` et utilise `reusePort: true` pour que l'OS distribue les connexions entre les workers.
+
+```ts
+createServer({
+  port: 3000,
+  cluster: { enabled: true, workers: 4 },
+})
+```
+
+Les workers vérifient le PID du processus principal toutes les 2 secondes et s'arrêtent proprement si le principal est disparu.
+
+## Déploiement en production
+
+<Steps>
+
+1. Build :
+
+   ```bash
+   bun run build
+   ```
+
+2. Démarrage :
+
+   ```bash
+   bun dist/server.js
+   ```
+
+</Steps>

@@ -1,0 +1,136 @@
+---
+title: Gestion des erreurs
+description: Helpers d'erreurs HTTP et gestion globale des erreurs dans Lacis.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Lacis exporte des constructeurs d'erreurs HTTP typés et un helper `sendError`. Utilisez-les pour envoyer des réponses d'erreur cohérentes et correctement formatées sans écrire `res.status(...).json(...)` manuellement.
+
+## Constructeurs d'erreurs intégrés
+
+```ts
+import {
+  createBadRequestError,         // 400
+  createUnauthorizedError,       // 401
+  createForbiddenError,          // 403
+  createNotFoundError,           // 404
+  createConflictError,           // 409
+  createValidationError,         // 422
+  createInternalServerError,     // 500
+  createServiceUnavailableError, // 503
+  createGatewayTimeoutError,     // 504
+} from 'lacis'
+```
+
+Chacun accepte un `message` optionnel et un objet `details` :
+
+```ts
+createNotFoundError('Utilisateur non trouvé', { id: req.params.id })
+```
+
+## Lancer des erreurs
+
+Le pattern le plus simple : `throw` n'importe quel constructeur d'erreur et Lacis envoie automatiquement le bon code de statut.
+
+```ts
+import type { Request, Response } from 'lacis'
+import { createUnauthorizedError, createNotFoundError } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  const token = req.getHeader('authorization')
+  if (!token) throw createUnauthorizedError('Token manquant')
+
+  const user = await db.findUser(req.params.id)
+  if (!user) throw createNotFoundError('Utilisateur non trouvé', { id: req.params.id })
+
+  res.json(user)
+}
+```
+
+## `sendError`
+
+Alternative au throw — envoie l'erreur en JSON et définit le bon code de statut directement. Utile quand vous devez envoyer une erreur et faire du nettoyage avant de retourner.
+
+```ts
+import type { Request, Response } from 'lacis'
+import { sendError, createUnauthorizedError, createNotFoundError } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  const token = req.getHeader('authorization')
+  if (!token) {
+    sendError(createUnauthorizedError('Token manquant'), res)
+    return
+  }
+
+  const user = await db.findUser(req.params.id)
+  if (!user) {
+    sendError(createNotFoundError('Utilisateur non trouvé', { id: req.params.id }), res)
+    return
+  }
+
+  res.json(user)
+}
+```
+
+Le client reçoit :
+
+```json
+{ "error": "Utilisateur non trouvé", "code": 404, "details": { "id": "42" } }
+```
+
+<Aside>
+`sendError` vérifie `res.headersSent` avant d'écrire — sans risque même si vous n'êtes pas sûr que la réponse ait déjà démarré.
+</Aside>
+
+## Exposition des détails
+
+- **Erreurs 4xx** — `details` est inclus dans le corps de la réponse (sûr à exposer au client)
+- **Erreurs 5xx** — `details` n'est jamais envoyé au client ; l'erreur est loguée côté serveur
+
+```ts
+// ✅ details envoyés au client — 422
+sendError(createValidationError('Entrée invalide', { field: 'email' }), res)
+// → { "error": "Entrée invalide", "code": 422, "details": { "field": "email" } }
+
+// ✅ details NON envoyés au client — 500
+sendError(createInternalServerError('Requête DB échouée', { query: sql }), res)
+// → { "error": "Internal Server Error", "code": 500 }
+```
+
+## Gestionnaire d'erreurs global
+
+Utilisez le hook middleware `onError` pour centraliser les logs ou transmettre les erreurs à un service externe :
+
+```ts
+import { createServer, normalizeError, sendError } from 'lacis'
+
+createServer('./routes', {
+  middleware: {
+    onError: async (req, res, ctx) => {
+      const error = normalizeError(ctx.error)
+
+      // Transmettre à Sentry, Datadog, etc.
+      captureException(error)
+
+      if (!res.headersSent) {
+        sendError(error, res)
+      }
+    },
+  },
+})
+```
+
+## `normalizeError`
+
+Convertit n'importe quelle erreur inconnue en `HttpError` typé. Utile dans `onError` quand vous ne contrôlez pas la source de l'erreur :
+
+```ts
+import { normalizeError } from 'lacis'
+
+const error = normalizeError(unknownErr)
+// ECONNREFUSED / ENOTFOUND → 503
+// ETIMEDOUT               → 504
+// { statusCode: 422 }     → 422
+// tout le reste           → 500
+```
