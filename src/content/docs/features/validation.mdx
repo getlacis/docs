@@ -1,0 +1,176 @@
+---
+title: Validation
+description: Request validation with defineHandler and Standard Schema.
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+`defineHandler` wraps a route handler to add schema validation and type inference. It accepts any library that implements the [Standard Schema](https://standardschema.dev/) spec — Zod, Valibot, and ArkType all work out of the box.
+
+## Basic usage
+
+```ts
+import { defineHandler } from 'lacis'
+import { z } from 'zod'
+
+export const GET = defineHandler({
+  params: z.object({ id: z.string().uuid() }),
+  query: z.object({ verbose: z.coerce.boolean().optional() }),
+  meta: { summary: 'Get user by ID', tags: ['users'] },
+  handler: async (req, res) => {
+    req.params.id      // string — validated and typed
+    req.query.verbose  // boolean | undefined — validated and typed
+    res.json({ id: req.params.id })
+  },
+})
+```
+
+The return value is a plain async function — export it like any other route handler.
+
+## Configuration fields
+
+### `params`, `query`, `body`
+
+Each field accepts a Standard Schema. Schemas are validated in order: `params` first, then `query`, then `body`. If any fails, Lacis returns `400` immediately.
+
+- `params` — validated against `req.params` (URL path parameters)
+- `query` — validated against `req.query` (parsed query string)
+- `body` — Lacis calls `req.json()` internally and validates the result
+
+### `meta`
+
+Attached to the OpenAPI operation when the spec is generated. No effect at request time.
+
+```ts
+meta: {
+  summary: 'Create user',
+  description: 'Creates a new user account.',
+  tags: ['users'],
+  deprecated: false,
+}
+```
+
+### `handler`
+
+The actual request handler with fully typed `req` and `res`.
+
+## Validation errors
+
+When validation fails, Lacis sends a `400` automatically:
+
+```json
+{
+  "error": "Validation failed",
+  "issues": [
+    { "message": "Invalid uuid", "path": ["id"] }
+  ]
+}
+```
+
+The handler is never called when validation fails.
+
+## Query coercion
+
+Query strings are always strings. Use your validator's coercion utilities:
+
+<Tabs>
+<TabItem label="Zod">
+```ts
+query: z.object({
+  page: z.coerce.number().int().positive(),
+  active: z.coerce.boolean().optional(),
+})
+```
+</TabItem>
+<TabItem label="Valibot">
+```ts
+import * as v from 'valibot'
+
+query: v.object({
+  page: v.pipe(v.string(), v.transform(Number), v.integer()),
+  active: v.optional(v.pipe(v.string(), v.transform((s) => s === 'true'))),
+})
+```
+</TabItem>
+<TabItem label="ArkType">
+```ts
+import { type } from 'arktype'
+
+query: type({ page: 'number.integer > 0', 'active?': 'boolean' })
+```
+</TabItem>
+</Tabs>
+
+## Body validation
+
+<Tabs>
+<TabItem label="Zod">
+```ts
+import { defineHandler } from 'lacis'
+import { z } from 'zod'
+
+export const POST = defineHandler({
+  body: z.object({
+    name: z.string().min(1),
+    email: z.string().email(),
+  }),
+  meta: { summary: 'Create user', tags: ['users'] },
+  handler: async (req, res) => {
+    const { name, email } = req.body  // fully typed
+    res.status(201).json({ name, email })
+  },
+})
+```
+</TabItem>
+<TabItem label="Valibot">
+```ts
+import { defineHandler } from 'lacis'
+import * as v from 'valibot'
+
+export const POST = defineHandler({
+  body: v.object({
+    name: v.pipe(v.string(), v.minLength(1)),
+    email: v.pipe(v.string(), v.email()),
+  }),
+  meta: { summary: 'Create user', tags: ['users'] },
+  handler: async (req, res) => {
+    const { name, email } = req.body
+    res.status(201).json({ name, email })
+  },
+})
+```
+</TabItem>
+<TabItem label="ArkType">
+```ts
+import { defineHandler } from 'lacis'
+import { type } from 'arktype'
+
+export const POST = defineHandler({
+  body: type({ name: 'string > 0', email: 'string.email' }),
+  meta: { summary: 'Create user', tags: ['users'] },
+  handler: async (req, res) => {
+    const { name, email } = req.body
+    res.status(201).json({ name, email })
+  },
+})
+```
+</TabItem>
+</Tabs>
+
+## Combined schemas
+
+```ts
+export const PUT = defineHandler({
+  params: z.object({ id: z.string().uuid() }),
+  query: z.object({ dryRun: z.coerce.boolean().default(false) }),
+  body: z.object({ name: z.string(), email: z.string().email() }),
+  handler: async (req, res) => {
+    if (req.query.dryRun) return res.json({ ok: true, dry: true })
+    res.json({ id: req.params.id, ...req.body })
+  },
+})
+```
+
+## Type inference
+
+TypeScript infers the output types of your schemas. Change a schema, and the types in `handler` update automatically — no manual annotations needed.

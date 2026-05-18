@@ -1,0 +1,185 @@
+---
+title: Routing
+description: File-based routing in Lacis — how files map to URLs, HTTP methods, dynamic segments, and wildcards.
+---
+
+import { FileTree, Aside } from '@astrojs/starlight/components';
+
+Lacis generates routes automatically from your `routes/` directory. Every `index.ts` file inside that directory becomes a URL endpoint — no manual route registration needed.
+
+## Directory structure
+
+Place route files under `routes/`. The directory hierarchy maps directly to URL paths.
+
+<FileTree>
+- routes/
+  - index.ts           → GET /
+  - users/
+    - index.ts         → /users
+    - [id]/
+      - index.ts       → /users/:id
+  - posts/
+    - index.ts         → /posts
+    - [slug]/
+      - index.ts       → /posts/:slug
+</FileTree>
+
+<Aside>
+Only `index.ts` (or `index.js`) files are treated as route handlers. Other files in the directory are ignored, so you can colocate utilities, types, and helpers freely.
+</Aside>
+
+## HTTP method exports
+
+Export named functions matching uppercase HTTP method names. Each export handles that method for the file's URL.
+
+```ts
+// routes/users/index.ts → /users
+import type { Request, Response } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  res.json({ users: [] })
+}
+
+export async function POST(req: Request, res: Response) {
+  const body = await req.json()
+  res.status(201).json({ created: body })
+}
+
+export async function PUT(req: Request, res: Response) {
+  const body = await req.json()
+  res.json({ updated: body })
+}
+
+export async function PATCH(req: Request, res: Response) {
+  const body = await req.json()
+  res.json({ patched: body })
+}
+
+export async function DELETE(req: Request, res: Response) {
+  res.status(204).send('')
+}
+```
+
+Supported method exports: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`.
+
+## Dynamic segments
+
+Wrap a directory name in square brackets to make it a URL parameter. The parameter name is the text inside the brackets.
+
+<FileTree>
+- routes/
+  - users/
+    - [id]/
+      - index.ts    → /users/:id
+  - orgs/
+    - [orgId]/
+      - teams/
+        - [teamId]/
+          - index.ts  → /orgs/:orgId/teams/:teamId
+</FileTree>
+
+Access parameters via `req.params`:
+
+```ts
+// routes/users/[id]/index.ts → /users/:id
+import type { Request, Response } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  const { id } = req.params
+  res.json({ id })
+}
+```
+
+<Aside type="caution">
+Static segments take priority over dynamic ones. A request to `/users/settings` matches `routes/users/settings/index.ts` before `routes/users/[id]/index.ts`.
+</Aside>
+
+## Nested routes
+
+Nest directories to create nested URL paths. Each level can have its own `index.ts` with independent handlers.
+
+<FileTree>
+- routes/
+  - api/
+    - index.ts              → /api
+    - users/
+      - index.ts            → /api/users
+      - [id]/
+        - index.ts          → /api/users/:id
+        - posts/
+          - index.ts        → /api/users/:id/posts
+</FileTree>
+
+```ts
+// routes/api/users/[id]/posts/index.ts → /api/users/:id/posts
+import type { Request, Response } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  const { id } = req.params
+  res.json({ userId: id, posts: [] })
+}
+```
+
+## Wildcard routes
+
+Use a `[...]` directory name to match any remaining path segments.
+
+<FileTree>
+- routes/
+  - files/
+    - [...path]/
+      - index.ts    → /files/*
+</FileTree>
+
+```ts
+// routes/files/[...path]/index.ts
+import type { Request, Response } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  const filePath = req.params.path
+  res.json({ path: filePath })
+}
+```
+
+## Method Not Allowed
+
+When a route exists but the request uses an unregistered HTTP method, Lacis returns `405 Method Not Allowed` and sets an `Allow` header listing the supported methods automatically.
+
+## Complete example
+
+```ts
+// routes/index.ts → GET /
+import type { Request, Response } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  res.json({ name: 'My API', version: '1.0.0' })
+}
+```
+
+```ts
+// routes/users/index.ts → /users
+import type { Request, Response } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  res.json({ users: [] })
+}
+
+export async function POST(req: Request, res: Response) {
+  const body = await req.json<{ name: string; email: string }>()
+  res.status(201).json({ id: crypto.randomUUID(), ...body })
+}
+```
+
+```ts
+// routes/users/[id]/index.ts → /users/:id
+import type { Request, Response } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  const { id } = req.params
+  res.json({ id, name: 'Alice' })
+}
+
+export async function DELETE(req: Request, res: Response) {
+  res.status(204).send('')
+}
+```

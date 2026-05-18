@@ -1,0 +1,109 @@
+---
+title: Node.js
+description: Deploy Lacis on Node.js with the nodeAdapter.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+<Aside type="tip" title="Long-running server">
+The Node.js adapter runs a persistent HTTP(S) server. It scans your `routes/` directory at startup — no pre-compilation step required.
+</Aside>
+
+## Entry point
+
+```ts
+// server.ts
+import { nodeAdapter } from 'lacis/adapters'
+
+const createServer = nodeAdapter.createHandler('./routes')
+
+createServer({
+  port: 3000,
+  isDev: process.env.NODE_ENV !== 'production',
+})
+```
+
+## Config options
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `port` | `number` | `3000` | Port to listen on |
+| `isDev` | `boolean` | `false` | Enables dev mode |
+| `defaultHeaders` | `Record<string, string>` | — | Headers added to every response |
+| `httpsOptions` | `object` | — | TLS config |
+| `cluster` | `object` | — | Multi-process clustering |
+| `monitoring` | `object` | `{ enabled: false }` | Dev performance monitoring |
+| `cors` | `CorsConfig` | — | CORS policy |
+| `middleware` | `object` | — | `beforeRequest`, `afterRequest`, `onError` hooks |
+| `hooks` | `object` | — | `onNotFound`, `onShutdown` hooks |
+
+## Running in production
+
+<Steps>
+
+1. Build your TypeScript:
+
+   ```bash
+   npm run build
+   ```
+
+2. Start the server:
+
+   ```bash
+   node dist/server.js
+   ```
+
+3. Use a process manager for resilience:
+
+   ```bash
+   pm2 start dist/server.js --name my-api
+   ```
+
+</Steps>
+
+## HTTPS
+
+```ts
+import { readFileSync } from 'fs'
+import { nodeAdapter } from 'lacis/adapters'
+
+const createServer = nodeAdapter.createHandler('./routes')
+
+createServer({
+  port: 443,
+  httpsOptions: {
+    cert: readFileSync('./certs/cert.pem'),
+    key:  readFileSync('./certs/key.pem'),
+  },
+})
+```
+
+## Cluster mode
+
+Uses Node's built-in `cluster` module. The primary process manages workers and restarts any that crash.
+
+```ts
+createServer({
+  port: 3000,
+  cluster: {
+    enabled: true,
+    workers: 4, // defaults to os.cpus().length
+  },
+})
+```
+
+## Dev monitoring
+
+When `isDev: true` and `monitoring.enabled: true`, a `/health` endpoint returns live performance metrics:
+
+```ts
+createServer({
+  isDev: true,
+  monitoring: {
+    enabled: true,
+    sampleInterval: 5000,
+    reportInterval: 60000,
+    thresholds: { cpu: 80, memory: 512, responseTime: 500, errorRate: 5 },
+  },
+})
+```

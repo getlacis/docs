@@ -1,0 +1,274 @@
+---
+title: Request & Response
+description: Complete API reference for the Request and Response objects in Lacis.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Every route handler receives a `req` (Request) and `res` (Response) object.
+
+```ts
+import type { Request, Response } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  res.json({ ok: true })
+}
+```
+
+---
+
+## Request
+
+### `req.params`
+
+URL path parameters extracted from dynamic route segments.
+
+```ts
+// routes/users/[id]/index.ts → /users/:id
+export async function GET(req: Request, res: Response) {
+  const { id } = req.params
+  res.json({ id })
+}
+```
+
+**Type:** `Record<string, string>`
+
+---
+
+### `req.query`
+
+The parsed query string as a flat key-value object. Values are always strings — coerce as needed.
+
+```ts
+// GET /search?q=lacis&page=2
+export async function GET(req: Request, res: Response) {
+  const { q, page } = req.query
+  res.json({ q, page: Number(page) })
+}
+```
+
+**Type:** `Record<string, string>`
+
+---
+
+### `req.json<T>()`
+
+Reads and parses the request body as JSON.
+
+```ts
+interface CreateUser {
+  name: string
+  email: string
+}
+
+export async function POST(req: Request, res: Response) {
+  const body = await req.json<CreateUser>()
+  res.status(201).json({ created: body.name })
+}
+```
+
+**Signature:** `json<T>(): Promise<T>`
+
+<Aside type="caution">
+The body stream can only be read once. Call `req.json()` a single time per request.
+</Aside>
+
+---
+
+### `req.form<T>()`
+
+Parses a `multipart/form-data` body. Plain fields are strings; file fields are `UploadedFile` objects.
+
+```ts
+export async function POST(req: Request, res: Response) {
+  const form = await req.form<{ name: string; avatar: UploadedFile }>()
+  console.log(form.name)           // 'Alice'
+  console.log(form.avatar.size)    // file size in bytes
+  res.status(201).json({ ok: true })
+}
+```
+
+**Signature:** `form<T>(): Promise<T>`
+
+---
+
+### `req.body()`
+
+Reads the raw request body as a `Buffer`. Useful for binary payloads or custom parsing.
+
+```ts
+export async function POST(req: Request, res: Response) {
+  const raw = await req.body()
+  const text = raw.toString('utf-8')
+  res.send(text)
+}
+```
+
+**Signature:** `body(): Promise<Buffer>`
+
+Maximum body size is 10 MB. Larger requests are rejected with `413 Payload Too Large`.
+
+---
+
+### `req.getHeader(name)`
+
+Reads a single request header. Lookup is case-insensitive.
+
+```ts
+export async function GET(req: Request, res: Response) {
+  const auth = req.getHeader('authorization')
+  if (!auth) return res.status(401).json({ error: 'Unauthorized' })
+  res.json({ ok: true })
+}
+```
+
+**Signature:** `getHeader(name: string): string | undefined`
+
+---
+
+### `req.cookies.get(name)`
+
+Reads a single cookie from the incoming `Cookie` header. The value is URL-decoded automatically.
+
+```ts
+export async function GET(req: Request, res: Response) {
+  const sessionId = req.cookies.get('session')
+  if (!sessionId) return res.status(401).json({ error: 'No session' })
+  res.json({ session: sessionId })
+}
+```
+
+**Signature:** `get(name: string): string | undefined`
+
+---
+
+### `req.cookies.all()`
+
+Returns all cookies as a plain object.
+
+```ts
+export async function GET(req: Request, res: Response) {
+  const cookies = req.cookies.all()
+  res.json(cookies)
+}
+```
+
+**Signature:** `all(): Record<string, string>`
+
+---
+
+### `req.connection.remoteAddress`
+
+The client's IP address. For requests behind a reverse proxy, use the `X-Forwarded-For` header instead.
+
+```ts
+export async function GET(req: Request, res: Response) {
+  const ip = req.getHeader('x-forwarded-for') ?? req.connection.remoteAddress
+  res.json({ ip })
+}
+```
+
+---
+
+## Response
+
+### `res.json(data)`
+
+Serializes `data` to JSON, sets `Content-Type: application/json`, and ends the response.
+
+```ts
+res.json({ users: ['alice', 'bob'] })
+```
+
+---
+
+### `res.html(content)`
+
+Sends an HTML string with `Content-Type: text/html; charset=utf-8`.
+
+```ts
+res.html('<h1>Hello, world</h1>')
+```
+
+---
+
+### `res.send(data)`
+
+Sends a plain text response. If `data` is not a string, delegates to `res.json()`.
+
+```ts
+res.send('pong')
+```
+
+---
+
+### `res.redirect(url, status?)`
+
+Redirects the client. Default status is `302`.
+
+```ts
+res.redirect('/login')
+res.redirect('/new-path', 301)
+```
+
+---
+
+### `res.status(code)`
+
+Sets the HTTP status code. Chainable.
+
+```ts
+res.status(201).json({ created: true })
+res.status(204).send('')
+```
+
+---
+
+### `res.setHeader(name, value)`
+
+Sets a response header. Must be called before the response ends.
+
+```ts
+res.setHeader('X-Custom-Header', 'lacis')
+res.json({ ok: true })
+```
+
+---
+
+### `res.cookies.set(name, value, options?)`
+
+Queues a `Set-Cookie` header. Chainable.
+
+```ts
+res.cookies
+  .set('session', 'abc123', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'Lax',
+    maxAge: 60 * 60 * 24 * 7,
+  })
+  .set('theme', 'dark')
+
+res.json({ ok: true })
+```
+
+| Option | Type | Description |
+|---|---|---|
+| `path` | `string` | Cookie path (default: `/`) |
+| `domain` | `string` | Cookie domain |
+| `maxAge` | `number` | Max age in seconds |
+| `expires` | `Date` | Absolute expiry |
+| `httpOnly` | `boolean` | Prevent JS access |
+| `secure` | `boolean` | HTTPS only |
+| `sameSite` | `'Strict' \| 'Lax' \| 'None'` | SameSite policy |
+
+---
+
+### `res.cookies.delete(name)`
+
+Deletes a cookie by setting `Max-Age: 0`.
+
+```ts
+res.cookies.delete('session')
+res.json({ loggedOut: true })
+```

@@ -1,0 +1,67 @@
+---
+title: Rate Limiting
+description: Built-in rate limiting in Lacis.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Setup
+
+Pass a rate limit middleware to `createServer` to apply it globally:
+
+```ts
+import { createServer } from 'lacis'
+import { createRateLimit } from 'lacis'
+
+createServer('./routes', {
+  middleware: {
+    beforeRequest: createRateLimit({ windowMs: 60_000, max: 100 }),
+  },
+})
+```
+
+Or scope it to a specific route via a middleware file:
+
+```ts
+// routes/api/+middleware.ts
+import { createRateLimit } from 'lacis'
+
+export const beforeRequest = createRateLimit({ windowMs: 60_000, max: 20 })
+```
+
+## Options
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `windowMs` | `number` | `60000` | Time window in milliseconds |
+| `max` | `number` | `100` | Max requests per window per key |
+| `message` | `string` | `'Too Many Requests'` | Error message in the 429 response |
+| `keyGenerator` | `(req) => string` | First IP from `X-Forwarded-For`, or `socket.remoteAddress` | Function to identify the requester |
+
+## Response headers
+
+Every response includes:
+
+| Header | Description |
+|---|---|
+| `X-RateLimit-Limit` | The configured `max` |
+| `X-RateLimit-Remaining` | Requests left in the current window |
+| `X-RateLimit-Reset` | Unix timestamp (seconds) when the window resets |
+
+When the limit is exceeded, a `429 Too Many Requests` response is sent with an additional `Retry-After` header indicating seconds until the window resets.
+
+## Custom key
+
+By default the rate limiter uses the client's IP. Use `keyGenerator` to key by user, API token, or any other identifier:
+
+```ts
+createRateLimit({
+  windowMs: 60_000,
+  max: 1000,
+  keyGenerator: (req) => req.getHeader('x-api-key') ?? req.connection.remoteAddress ?? 'unknown',
+})
+```
+
+<Aside>
+The rate limiter uses an in-memory store. It is not shared across cluster workers or multiple server instances. For distributed rate limiting, implement your own middleware backed by Redis or a similar store.
+</Aside>

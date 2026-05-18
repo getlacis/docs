@@ -1,0 +1,105 @@
+---
+title: Vercel
+description: Deploy Lacis on Vercel using the vercelAdapter and a pre-built routes manifest.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+<Aside type="caution" title="Serverless — routes must be pre-compiled">
+Vercel functions have no persistent filesystem. Lacis cannot scan your `routes/` directory at request time. You must run `lacis build` first to generate a routes manifest.
+</Aside>
+
+## How it differs from Node/Bun
+
+| | Node / Bun | Vercel / Netlify |
+|---|---|---|
+| Config | `routesDir` string | `ServerlessConfig` object |
+| Route discovery | `loadRoutes()` at startup | Pre-built manifest |
+| Build step | Optional | **Required** (`lacis build`) |
+
+## Project structure
+
+```
+my-app/
+├── api/
+│   └── [...slug].ts     ← Vercel catch-all handler
+├── routes/
+│   ├── users/
+│   │   └── index.ts
+│   └── posts/
+│       └── [id]/
+│           └── index.ts
+└── vercel.json
+```
+
+## API handler
+
+```ts
+// api/[...slug].ts
+import { vercelAdapter } from 'lacis/adapters'
+import { routes, middlewares } from '../routes/_manifest.js'
+
+const handler = vercelAdapter.createHandler({ routes, middlewares })
+
+export default handler
+```
+
+<Aside>
+`createHandler` initializes routes, CORS, middleware, and hooks once on first invocation and caches the result for subsequent requests in the same function instance.
+</Aside>
+
+## vercel.json
+
+```json
+{
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/api/slug" }
+  ]
+}
+```
+
+## Deploy flow
+
+<Steps>
+
+1. Add `lacis build` to your build command in `package.json`:
+
+   ```json
+   {
+     "scripts": {
+       "build": "lacis build"
+     }
+   }
+   ```
+
+2. Commit your handler:
+
+   ```bash
+   git add api/ vercel.json
+   git commit -m "add lacis vercel handler"
+   ```
+
+3. Deploy:
+
+   ```bash
+   vercel deploy --prod
+   ```
+
+   Vercel runs `lacis build` automatically on each deploy, regenerating the routes manifest.
+
+</Steps>
+
+## Optional config
+
+```ts
+const handler = vercelAdapter.createHandler({
+  routes,
+  middlewares,
+  cors: { origin: 'https://myapp.com', credentials: true },
+  hooks: {
+    onNotFound: async (req, res) => {
+      res.status(404).json({ error: 'Not found', path: req.url })
+    },
+  },
+})
+```

@@ -1,0 +1,103 @@
+---
+title: Netlify
+description: Deploy Lacis on Netlify using the netlifyAdapter and a pre-built routes manifest.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+<Aside type="caution" title="Serverless — routes must be pre-compiled">
+Netlify functions have no persistent filesystem. Lacis cannot scan your `routes/` directory at request time. You must run `lacis build` first to generate a routes manifest.
+</Aside>
+
+## How it differs from Node/Bun
+
+| | Node / Bun | Vercel / Netlify |
+|---|---|---|
+| Config | `routesDir` string | `ServerlessConfig` object |
+| Route discovery | `loadRoutes()` at startup | Pre-built manifest |
+| Build step | Optional | **Required** (`lacis build`) |
+
+## Project structure
+
+```
+my-app/
+├── netlify/
+│   └── functions/
+│       └── api.ts       ← Netlify function entry point
+├── routes/
+│   ├── users/
+│   │   └── index.ts
+│   └── posts/
+│       └── [id]/
+│           └── index.ts
+└── netlify.toml
+```
+
+## Function handler
+
+```ts
+// netlify/functions/api.ts
+import { netlifyAdapter } from 'lacis/adapters'
+import { routes, middlewares } from '../../routes/_manifest.js'
+
+const handler = netlifyAdapter.createHandler({ routes, middlewares })
+
+export { handler }
+```
+
+## netlify.toml
+
+```toml
+[build]
+  command = "lacis build"
+  publish = "public"
+
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/api"
+  status = 200
+```
+
+Setting `command = "lacis build"` regenerates the routes manifest on every deploy automatically.
+
+## Deploy flow
+
+<Steps>
+
+1. Install dependencies:
+
+   ```bash
+   npm install lacis @netlify/functions
+   ```
+
+2. Commit your function and config:
+
+   ```bash
+   git add netlify/ netlify.toml
+   git commit -m "add lacis netlify handler"
+   ```
+
+3. Deploy:
+
+   ```bash
+   netlify deploy --prod
+   ```
+
+   Netlify picks up the build command from `netlify.toml` and regenerates the manifest automatically.
+
+</Steps>
+
+## Optional config
+
+```ts
+const handler = netlifyAdapter.createHandler({
+  routes,
+  middlewares,
+  cors: { origin: 'https://myapp.com', credentials: true },
+  hooks: {
+    onNotFound: async (req, res) => {
+      res.status(404).json({ error: 'Not found', path: req.url })
+    },
+  },
+})
+```

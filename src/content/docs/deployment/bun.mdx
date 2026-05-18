@@ -1,0 +1,88 @@
+---
+title: Bun
+description: Deploy Lacis on Bun with the bunAdapter.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+<Aside type="tip" title="Long-running server">
+The Bun adapter runs a persistent server using `Bun.serve()`. It scans your `routes/` directory at startup — no pre-compilation step required.
+</Aside>
+
+## Entry point
+
+```ts
+// server.ts
+import { bunAdapter } from 'lacis/adapters'
+
+const createServer = bunAdapter.createHandler('./routes')
+
+createServer({
+  port: 3000,
+  isDev: process.env.NODE_ENV !== 'production',
+})
+```
+
+## How the Bun adapter differs
+
+- **Native fetch handler** — requests are handled as standard `Request`/`Response` objects, wrapped in thin `BunRequest`/`BunResponse` classes
+- **TransformStream for SSE** — Bun's `Bun.serve()` needs the `Response` synchronously, so `initSSE()` must be called before the first `await` in your handler
+- **Faster JSON parsing** — delegates directly to Bun's native JSON parser
+
+## SSE constraint
+
+```ts
+export async function GET(req, res) {
+  res.initSSE() // must be before any await
+
+  const data = await fetchSomething()
+  // ...
+}
+```
+
+<Aside type="danger">
+If `initSSE()` is called after an `await`, Lacis throws: `initSSE() must be called synchronously before any await in your handler`.
+</Aside>
+
+## Config options
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `port` | `number` | `3000` | Port to listen on |
+| `isDev` | `boolean` | `false` | Enables dev mode |
+| `defaultHeaders` | `Record<string, string>` | — | Headers added to every response |
+| `cluster` | `object` | — | Multi-worker via `reusePort` |
+| `cors` | `CorsConfig` | — | CORS policy |
+| `middleware` | `object` | — | `beforeRequest`, `afterRequest`, `onError` hooks |
+| `hooks` | `object` | — | `onNotFound`, `onShutdown` hooks |
+
+## Cluster mode
+
+Lacis spawns worker processes with `Bun.spawn()` and uses `reusePort: true` so the OS distributes connections across workers.
+
+```ts
+createServer({
+  port: 3000,
+  cluster: { enabled: true, workers: 4 },
+})
+```
+
+Workers poll the primary's PID every 2 seconds and exit cleanly if the primary is gone.
+
+## Running in production
+
+<Steps>
+
+1. Build:
+
+   ```bash
+   bun run build
+   ```
+
+2. Start:
+
+   ```bash
+   bun dist/server.js
+   ```
+
+</Steps>

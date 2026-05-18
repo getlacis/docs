@@ -1,0 +1,77 @@
+---
+title: Caching
+description: HTTP response caching in Lacis.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Lacis provides two caching APIs: middleware-based (`createResponseCache`) and handler-wrapping (`withCache`).
+
+## Middleware approach
+
+`createResponseCache` registers a middleware that caches responses before they are sent. Apply it globally or per-route.
+
+```ts
+import { createServer } from 'lacis'
+import { createResponseCache } from 'lacis'
+
+createServer('./routes', {
+  middleware: {
+    beforeRequest: createResponseCache({ ttl: 60 }),
+  },
+})
+```
+
+### Options
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `ttl` | `number` | required | Cache duration in **seconds** |
+| `methods` | `string[]` | `['GET', 'HEAD']` | HTTP methods to cache |
+| `maxSize` | `number` | `500` | Max entries before LRU eviction |
+| `keyGenerator` | `(req) => string` | `METHOD:URL` | Cache key function |
+| `match` | `(req) => boolean` | — | Only cache when this returns `true` |
+| `exclude` | `string \| string[]` | — | Path prefixes to skip |
+| `shouldCache` | `(req, res) => boolean` | 2xx status codes | Whether to store a response |
+
+### Excludes
+
+```ts
+createResponseCache({
+  ttl: 60,
+  exclude: ['/admin', '/api/private'],
+})
+```
+
+## Handler wrapping
+
+`withCache` wraps an individual handler. Useful when you want caching on one route without a global middleware.
+
+```ts
+import { withCache } from 'lacis'
+import type { Request, Response } from 'lacis'
+
+export const GET = withCache(
+  { ttl: 300 },
+  async (req: Request, res: Response) => {
+    const data = await fetchExpensiveData()
+    res.json(data)
+  }
+)
+```
+
+### Options
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `ttl` | `number` | required | Cache duration in **seconds** |
+| `maxSize` | `number` | `500` | Max entries before LRU eviction |
+| `key` | `(req) => string` | `METHOD:URL` | Cache key function |
+
+## LRU eviction
+
+When `maxSize` is reached, the 50 least recently used entries are evicted at once. Entries also expire individually based on `ttl`.
+
+<Aside>
+SSE responses (`text/event-stream`) and responses that set `Set-Cookie` are **never cached**, regardless of configuration.
+</Aside>

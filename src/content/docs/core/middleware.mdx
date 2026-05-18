@@ -1,0 +1,161 @@
+---
+title: Middleware
+description: Global cascade and exact-path middleware in Lacis.
+---
+
+import { Aside, FileTree } from '@astrojs/starlight/components';
+
+Lacis middleware is file-based. Place a middleware file alongside your route files and Lacis loads it automatically. There are two filename conventions with different scoping behaviors.
+
+<Aside type="tip" title="Key distinction">
+`+middleware.global.ts` cascades to the current directory and all subdirectories. `+middleware.ts` applies only to routes at that exact directory level and does not cascade.
+</Aside>
+
+## The two types
+
+### `+middleware.global.ts` — cascading
+
+Runs for every route at its directory level and all routes below it. Right for concerns like authentication, logging, or CORS that apply to an entire section of your API.
+
+### `+middleware.ts` — exact path
+
+Runs only when the route path matches the directory that contains it. Does not run for child routes.
+
+## File structure
+
+<FileTree>
+- routes/
+  - +middleware.global.ts   (runs for every route)
+  - index.ts                (GET /)
+  - api/
+    - +middleware.global.ts (runs for /api and all /api/* routes)
+    - +middleware.ts        (runs for /api only — NOT /api/users)
+    - index.ts              (GET /api)
+    - users/
+      - index.ts            (GET /api/users)
+      - [id]/
+        - index.ts          (GET /api/users/:id)
+</FileTree>
+
+For the route `GET /api/users`, the execution order is:
+
+1. `routes/+middleware.global.ts` `beforeRequest`
+2. `routes/api/+middleware.global.ts` `beforeRequest`
+3. Route handler
+4. `routes/api/+middleware.global.ts` `afterRequest`
+5. `routes/+middleware.global.ts` `afterRequest`
+
+`routes/api/+middleware.ts` does **not** run for `/api/users` — only for `/api` itself.
+
+## Hooks
+
+Each middleware file can export any combination of `beforeRequest`, `afterRequest`, and `onError`.
+
+### `beforeRequest`
+
+Runs before the route handler. Returning `false` stops the pipeline — the handler and all subsequent middleware are skipped.
+
+```ts
+// routes/api/+middleware.global.ts
+import type { Request, Response } from 'lacis'
+
+export const beforeRequest = async (req: Request, res: Response) => {
+  const token = req.getHeader('authorization')
+  if (!token) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return false
+  }
+}
+```
+
+You can export an array — handlers run in order, and the first `false` stops the chain.
+
+```ts
+export const beforeRequest = [authCheck, rateLimitCheck]
+```
+
+### `afterRequest`
+
+Runs after the route handler completes.
+
+```ts
+export const afterRequest = async (req: Request, res: Response) => {
+  console.log(`${req.method} ${req.url}`)
+}
+```
+
+### `onError`
+
+Runs when an unhandled error is thrown by any middleware or the route handler.
+
+```ts
+export const onError = async (
+  req: Request,
+  res: Response,
+  context: { error: unknown; phase: string }
+) => {
+  console.error(`[${context.phase}]`, context.error)
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Internal Server Error' })
+  }
+}
+```
+
+## Registering middleware in `createServer`
+
+For middleware that should apply globally, pass it directly to `createServer`:
+
+```ts
+import { createServer } from 'lacis'
+
+createServer('./routes', {
+  middleware: {
+    beforeRequest: async (req, res) => {
+      console.log(`--> ${req.method} ${req.url}`)
+    },
+    afterRequest: async (req, res) => {
+      console.log(`<-- ${req.method} ${req.url}`)
+    },
+    onError: async (req, res, ctx) => {
+      console.error('Unhandled error:', ctx.error)
+    },
+  },
+})
+```
+
+Each property accepts a single handler or an array.
+
+## Lifecycle hooks
+
+Lifecycle hooks are registered under `hooks` in `createServer`.
+
+### `onNotFound`
+
+Called when no route matches the request. If the hook sends a response, the default 404 JSON is skipped.
+
+```ts
+createServer('./routes', {
+  hooks: {
+    onNotFound: async (req, res) => {
+      res.status(404).json({ error: 'Not found', path: req.url })
+    },
+  },
+})
+```
+
+### `onShutdown`
+
+Called during graceful shutdown on `SIGINT`, `SIGTERM`, or `SIGHUP`. Use it to close database connections or flush buffers.
+
+```ts
+createServer('./routes', {
+  hooks: {
+    onShutdown: async () => {
+      await db.end()
+      await cache.quit()
+    },
+  },
+})
+```
+
+`onShutdown` runs after the server stops accepting connections. Errors inside it are caught and logged — they do not prevent shutdown.

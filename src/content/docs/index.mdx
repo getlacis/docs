@@ -1,0 +1,38 @@
+---
+title: Lacis
+description: Zero-dependency TypeScript web framework with file-based routing.
+template: splash
+hero:
+  tagline: File-based routing. Zero dependencies. Node, Bun, Vercel, Netlify.
+  actions:
+    - text: Get Started
+      link: /getting-started/
+      icon: right-arrow
+    - text: GitHub
+      link: https://github.com/getlacis/lacis
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid stagger>
+  <Card title="Zero dependencies" icon="approve-check">
+    No runtime dependencies. Lacis ships as a single package with nothing extra pulling in.
+  </Card>
+  <Card title="File-based routing" icon="document">
+    Drop a file in `routes/` and it becomes an endpoint. No registration, no config.
+  </Card>
+  <Card title="Multi-platform" icon="laptop">
+    One codebase, four targets: Node.js, Bun, Vercel, and Netlify via first-class adapters.
+  </Card>
+  <Card title="Standard Schema validation" icon="approve-check-circle">
+    Bring your own validator — Zod, Valibot, or ArkType. Full type inference included.
+  </Card>
+  <Card title="Batteries included" icon="setting">
+    CORS, rate limiting, response caching, SSE, and OpenAPI generation out of the box.
+  </Card>
+  <Card title="TypeScript-first" icon="seti:typescript">
+    Fully typed request and response objects. No casting, no `any`.
+  </Card>
+</CardGrid>

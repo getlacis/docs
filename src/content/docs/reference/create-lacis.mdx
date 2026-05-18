@@ -1,0 +1,121 @@
+---
+title: create-lacis
+description: Scaffold a new Lacis project with the interactive CLI.
+---
+
+import { FileTree, Tabs, TabItem } from '@astrojs/starlight/components';
+
+`create-lacis` is the official scaffolding CLI. It sets up a new Lacis project with the right structure, entry point, and dependencies for your target platform.
+
+## Usage
+
+```bash
+npm create lacis@latest
+```
+
+## Prompts
+
+The CLI asks three questions:
+
+1. **Project name** — becomes the directory name (lowercase letters, numbers, `-`, `_`, `.`)
+2. **Platform** — Node.js, Bun, Vercel, or Netlify
+3. **Validation library** — Zod, Valibot, ArkType, or none
+
+## Generated structure
+
+<Tabs>
+<TabItem label="Node.js">
+<FileTree>
+- my-app/
+  - routes/
+    - index.ts
+  - server.ts
+  - package.json
+  - tsconfig.json
+  - .gitignore
+</FileTree>
+
+```json
+// package.json scripts
+{
+  "dev": "tsx watch server.ts",
+  "build": "lacis build"
+}
+```
+</TabItem>
+<TabItem label="Bun">
+<FileTree>
+- my-app/
+  - routes/
+    - index.ts
+  - server.ts
+  - package.json
+  - tsconfig.json
+  - .gitignore
+</FileTree>
+
+```json
+// package.json scripts
+{
+  "dev": "bun --watch server.ts",
+  "build": "lacis build"
+}
+```
+</TabItem>
+<TabItem label="Vercel">
+<FileTree>
+- my-app/
+  - routes/
+    - index.ts
+  - api/
+    - slug.ts
+  - vercel.json
+  - package.json
+  - tsconfig.json
+  - .gitignore
+</FileTree>
+
+```json
+// package.json scripts
+{
+  "dev": "lacis dev",
+  "build": "lacis build"
+}
+```
+</TabItem>
+<TabItem label="Netlify">
+<FileTree>
+- my-app/
+  - routes/
+    - index.ts
+  - netlify/
+    - functions/
+      - api.ts
+  - netlify.toml
+  - package.json
+  - tsconfig.json
+  - .gitignore
+</FileTree>
+
+```json
+// package.json scripts
+{
+  "dev": "lacis dev",
+  "build": "lacis build"
+}
+```
+</TabItem>
+</Tabs>
+
+## Validator dependencies
+
+Each validator choice adds the appropriate packages to `dependencies`:
+
+| Choice | Packages added |
+|---|---|
+| Zod | `zod`, `zod-to-json-schema` |
+| Valibot | `valibot`, `@valibot/to-json-schema` |
+| ArkType | `arktype` |
+| None | — |
+
+The converter packages (`zod-to-json-schema`, `@valibot/to-json-schema`) are needed for OpenAPI spec generation. If you don't plan to use OpenAPI, you can remove them.

@@ -1,0 +1,155 @@
+---
+title: SSE
+description: Server-sent events in Lacis.
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Server-sent events (SSE) let you push data from server to client over a persistent HTTP connection. Lacis has first-class SSE support via `res.initSSE()`.
+
+## Basic usage
+
+```ts
+// routes/events/index.ts
+import type { Request, Response } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  const sse = res.initSSE()
+
+  // Send events
+  sse.json({ type: 'connected' })
+
+  await new Promise(resolve => setTimeout(resolve, 1000))
+  sse.json({ type: 'update', data: { value: 42 } })
+
+  sse.close()
+}
+```
+
+`initSSE()` sets the response headers (`Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`) and returns an `SSEContext`.
+
+## SSEContext API
+
+| Method | Description |
+|---|---|
+| `send(data: string)` | Send a raw `data:` line |
+| `json(data: any)` | Send JSON-serialized data |
+| `event(event: string, data: any)` | Send a named event with JSON data |
+| `comment(text: string)` | Send a comment (useful as keepalive) |
+| `id(id: string)` | Set the event `id` field |
+| `retry(ms: number)` | Tell the client how long to wait before reconnecting |
+| `close(comment?: string)` | Close the connection gracefully |
+| `error(event, message, code?, details?)` | Send an error event and close |
+
+All methods return `false` if the connection is already closed.
+
+## Options
+
+```ts
+const sse = res.initSSE({
+  timeout: 300_000,        // ms before auto-close (default: 300000 = 5 min)
+  headers: {
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no', // disable Nginx buffering
+  },
+})
+```
+
+## Bun constraint
+
+<Aside type="danger">
+On Bun, `initSSE()` **must be called synchronously before any `await`** in your handler. Bun's `Bun.serve()` needs the streaming `Response` object returned synchronously — if you `await` first, the window to initialize the SSE stream has already closed and Lacis will throw.
+</Aside>
+
+```ts
+// ✅ Correct — initSSE before any await
+export async function GET(req: Request, res: Response) {
+  const sse = res.initSSE()
+  const data = await fetchSomething()
+  sse.json(data)
+  sse.close()
+}
+
+// ❌ Wrong on Bun — await before initSSE
+export async function GET(req: Request, res: Response) {
+  const data = await fetchSomething()
+  const sse = res.initSSE() // throws on Bun
+}
+```
+
+This constraint does not apply to Node.js.
+
+## AI streaming example
+
+<Tabs>
+<TabItem label="Server">
+```ts
+// routes/chat/index.ts
+import type { Request, Response } from 'lacis'
+
+export async function POST(req: Request, res: Response) {
+  const sse = res.initSSE() // must be before any await on Bun
+
+  const { prompt } = await req.json<{ prompt: string }>()
+
+  try {
+    const stream = await llm.stream(prompt)
+    for await (const chunk of stream) {
+      sse.json({ delta: chunk.text })
+    }
+    sse.event('done', { finish_reason: 'stop' })
+    sse.close()
+  } catch (err) {
+    sse.error('error', 'Stream failed', 500)
+  }
+}
+```
+</TabItem>
+<TabItem label="Client">
+```ts
+import { createSSEClient } from 'lacis'
+
+const client = await createSSEClient('/chat', {
+  method: 'POST',
+  body: JSON.stringify({ prompt: 'Hello' }),
+  contentType: 'application/json',
+}, {
+  onMessage: (data) => console.log('chunk:', data),
+  onEvent: {
+    done: (data) => console.log('done:', data),
+    error: (data) => console.error('error:', data),
+  },
+  onClose: () => console.log('stream closed'),
+})
+```
+</TabItem>
+</Tabs>
+
+## Client API (`createSSEClient`)
+
+```ts
+import { createSSEClient } from 'lacis'
+
+const client = await createSSEClient(url, options, handlers)
+```
+
+**Options:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `method` | `string` | `'GET'` (or `'POST'` if `body` set) | HTTP method |
+| `body` | `string` | — | Request body |
+| `contentType` | `string` | `'application/json'` if body | Content-Type header |
+| `reconnectInterval` | `number` | `3000` | Ms between reconnect attempts |
+| `maxRetries` | `number` | `3` | Max reconnect attempts |
+| `disableReconnect` | `boolean` | `false` | Disable auto-reconnect |
+
+**Handlers:**
+
+| Handler | Description |
+|---|---|
+| `onMessage(data)` | Receives generic `data:` events |
+| `onEvent` | `Record<string, (data) => void>` for named events |
+| `onClose()` | Called when the connection closes |
+| `onError(error)` | Called on connection error |

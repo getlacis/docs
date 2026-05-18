@@ -1,0 +1,96 @@
+---
+title: OpenAPI
+description: Automatic OpenAPI spec generation in Lacis.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Lacis generates an OpenAPI 3.1.0 spec at runtime from your registered routes. Routes wrapped with `defineHandler` contribute their schema and `meta` fields to the spec.
+
+## Setup
+
+Add an `openapi` key to your server config:
+
+```ts
+// server.ts
+import { createServer } from 'lacis'
+
+createServer('./routes', {
+  openapi: {
+    path: '/openapi.json',
+    info: {
+      title: 'My API',
+      version: '1.0.0',
+    },
+  },
+})
+```
+
+The spec is served at `/openapi.json` on every request. No build step required.
+
+## Schema converters
+
+The spec is built by converting your validator schemas to JSON Schema. Each library requires its own converter:
+
+| Library | Package to install |
+|---|---|
+| Zod 4.4+ | none (native `toJSONSchema`) |
+| Zod < 4.4 | `zod-to-json-schema` |
+| Valibot | `@valibot/to-json-schema` |
+| ArkType | none (native `.toJsonSchema()`) |
+
+Install only the converter that matches your validator.
+
+## Annotating routes with `meta`
+
+```ts
+// routes/users/[id]/index.ts
+import { defineHandler } from 'lacis'
+import { z } from 'zod'
+
+export const GET = defineHandler({
+  params: z.object({ id: z.string().uuid() }),
+  meta: {
+    summary: 'Get user by ID',
+    description: 'Returns a single user record.',
+    tags: ['users'],
+  },
+  handler: async (req, res) => {
+    res.json({ id: req.params.id })
+  },
+})
+
+export const DELETE = defineHandler({
+  params: z.object({ id: z.string().uuid() }),
+  meta: { summary: 'Delete user', tags: ['users'], deprecated: true },
+  handler: async (req, res) => {
+    res.status(204).send('')
+  },
+})
+```
+
+## Using the spec
+
+The generated JSON is standard OpenAPI 3.1.0 — drop it into any compatible tool.
+
+**Scalar** (recommended):
+
+```html
+<!doctype html>
+<html>
+  <head><title>API Reference</title></head>
+  <body>
+    <script
+      id="api-reference"
+      data-url="/openapi.json"
+      src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"
+    ></script>
+  </body>
+</html>
+```
+
+**Postman / Insomnia**: use "Import from URL" → `http://localhost:3000/openapi.json`.
+
+## Routes without `defineHandler`
+
+Plain handlers appear in the spec with a minimal operation. Add `defineHandler` + `meta` to get richer output.

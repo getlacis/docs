@@ -1,0 +1,70 @@
+---
+title: CORS
+description: Cross-origin resource sharing configuration in Lacis.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Setup
+
+Pass a `cors` object to `createServer`:
+
+```ts
+import { createServer } from 'lacis'
+
+createServer('./routes', {
+  cors: {
+    origin: 'https://myapp.com',
+    credentials: true,
+  },
+})
+```
+
+Or use `createCorsMiddleware` directly to register it as middleware:
+
+```ts
+import { createCorsMiddleware } from 'lacis'
+
+export const beforeRequest = createCorsMiddleware({
+  origin: ['https://myapp.com', 'https://admin.myapp.com'],
+  credentials: true,
+})
+```
+
+## Options
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `origin` | `string \| string[] \| RegExp \| ((origin: string) => boolean) \| '*'` | `'*'` | Allowed origins |
+| `methods` | `string[]` | `['GET','POST','PUT','DELETE','PATCH','OPTIONS']` | Allowed HTTP methods |
+| `allowedHeaders` | `string[]` | `['Content-Type','Authorization']` | Allowed request headers |
+| `exposedHeaders` | `string[]` | — | Headers exposed to the browser |
+| `credentials` | `boolean` | — | Allow cookies / credentials |
+| `maxAge` | `number` | — | Preflight cache duration in seconds |
+
+## Origin formats
+
+```ts
+// Single origin
+origin: 'https://myapp.com'
+
+// Multiple origins
+origin: ['https://myapp.com', 'https://admin.myapp.com']
+
+// RegExp
+origin: /\.myapp\.com$/
+
+// Custom function
+origin: (origin) => origin.endsWith('.myapp.com')
+
+// Allow all (default)
+origin: '*'
+```
+
+<Aside>
+When `credentials: true` is set alongside `origin: '*'`, Lacis automatically reflects the actual request `Origin` header instead of responding with `*`. This is required by the CORS spec — browsers reject credentialed requests with a wildcard origin.
+</Aside>
+
+## Preflight
+
+Lacis handles `OPTIONS` preflight requests automatically. When a preflight comes in, it responds with `204` and the appropriate `Access-Control-Allow-*` headers, then stops further processing.

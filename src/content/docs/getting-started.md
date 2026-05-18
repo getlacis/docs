@@ -1,0 +1,67 @@
+---
+title: Getting Started
+description: Create your first Lacis project in minutes.
+---
+
+import { Steps, FileTree, Aside } from '@astrojs/starlight/components';
+
+<Steps>
+
+1. **Create a project**
+
+   Run the interactive scaffolding CLI:
+
+   ```bash
+   npm create lacis@latest
+   ```
+
+   You will be prompted for:
+   - **Project name** — directory name for the new project
+   - **Platform** — Node.js, Bun, Vercel, or Netlify
+   - **Validation library** — Zod, Valibot, ArkType, or none
+
+2. **Enter your project**
+
+   ```bash
+   cd my-app
+   ```
+
+   Your project looks like this (Node.js example):
+
+   <FileTree>
+   - my-app/
+     - routes/
+       - index.ts
+     - server.ts
+     - package.json
+     - tsconfig.json
+   </FileTree>
+
+3. **Start the dev server**
+
+   ```bash
+   npm run dev
+   ```
+
+   Your server is running at `http://localhost:3000`.
+
+</Steps>
+
+## Your first route
+
+The scaffolded `routes/index.ts` exports HTTP method handlers:
+
+```ts
+import type { Request, Response } from 'lacis'
+
+export const GET = async (_req: Request, res: Response) => {
+  res.status(200).json({ message: 'Hello from lacis!' })
+}
+```
+
+Each file in `routes/` maps to a URL path. Add a `POST` export to the same file, or create `routes/users/index.ts` for `/users`.
+
+## Next steps
+
+- [Routing](/core/routing/) — learn how file paths map to routes
+- [Validation](/features/validation/) — add type-safe request validation with `defineHandler`
