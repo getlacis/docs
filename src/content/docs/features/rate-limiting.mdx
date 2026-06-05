@@ -63,5 +63,34 @@ createRateLimit({
 ```
 
 <Aside>
-The rate limiter uses an in-memory store. It is not shared across cluster workers or multiple server instances. For distributed rate limiting, implement your own middleware backed by Redis or a similar store.
+The rate limiter uses an in-memory store. It is not shared across cluster workers or multiple server instances. For distributed rate limiting, pass a custom `store` backed by Redis or a similar service.
 </Aside>
+
+## Distributed store
+
+Pass a `store` option to use any external backend. The store must implement `get`, `set`, and `delete`.
+
+**Upstash Redis example:**
+
+```ts
+import { createRateLimit } from 'lacis'
+import type { RateLimitStore, RateLimitEntry } from 'lacis'
+import { Redis } from '@upstash/redis'
+
+const redis = new Redis({ url: process.env.UPSTASH_URL!, token: process.env.UPSTASH_TOKEN! })
+
+const store: RateLimitStore = {
+  async get(key) {
+    return await redis.get<RateLimitEntry>(key) ?? undefined
+  },
+  async set(key, entry) {
+    const ttl = Math.ceil((entry.resetAt - Date.now()) / 1000)
+    await redis.set(key, entry, { ex: ttl })
+  },
+  async delete(key) {
+    await redis.del(key)
+  },
+}
+
+createRateLimit({ windowMs: 60_000, max: 100, store })
+```

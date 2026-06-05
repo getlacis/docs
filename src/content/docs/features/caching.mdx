@@ -72,6 +72,33 @@ export const GET = withCache(
 
 When `maxSize` is reached, the 50 least recently used entries are evicted at once. Entries also expire individually based on `ttl`.
 
+## Distributed store
+
+Both `createResponseCache` and `withCache` accept a `store` option to use an external backend instead of the in-memory default.
+
+**Upstash Redis example:**
+
+```ts
+import { createResponseCache } from 'lacis'
+import type { CacheStore, CacheEntry } from 'lacis'
+import { Redis } from '@upstash/redis'
+
+const redis = new Redis({ url: process.env.UPSTASH_URL!, token: process.env.UPSTASH_TOKEN! })
+
+const store: CacheStore = {
+  async get(key) {
+    return await redis.get<CacheEntry>(key) ?? undefined
+  },
+  async set(key, entry) {
+    const ttl = Math.ceil((entry.expiresAt - Date.now()) / 1000)
+    await redis.set(key, entry, { ex: ttl })
+  },
+}
+
+createResponseCache({ ttl: 60, store })
+// or: withCache({ ttl: 60, store }, handler)
+```
+
 <Aside>
 SSE responses (`text/event-stream`) and responses that set `Set-Cookie` are **never cached**, regardless of configuration.
 </Aside>
