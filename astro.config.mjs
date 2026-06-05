@@ -87,6 +87,11 @@ export default defineConfig({
             },
             { label: "SSE", slug: "features/sse", translations: { fr: "SSE" } },
             {
+              label: "Streaming",
+              slug: "features/streaming",
+              translations: { fr: "Streaming" },
+            },
+            {
               label: "OpenAPI",
               slug: "features/openapi",
               translations: { fr: "OpenAPI" },

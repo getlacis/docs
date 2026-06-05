@@ -1,0 +1,139 @@
+---
+title: HTTP Streaming
+description: Stream raw bytes and NDJSON responses in Lacis.
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Lacis provides two streaming methods on the response object:
+
+- `res.stream(body)` — pipe a raw `ReadableStream` or `AsyncIterable<Uint8Array>` to the client
+- `res.ndjson(iter)` — serialize an `AsyncIterable` of objects as newline-delimited JSON
+
+A companion utility, `parseNDJSON(stream)`, converts an incoming `ReadableStream` into an `AsyncIterable` of parsed objects — useful for consuming LLM API responses.
+
+## Proxying an LLM stream
+
+The most common use case: forward a streaming response from an external LLM API directly to your client.
+
+<Tabs>
+<TabItem label="Ollama">
+```ts
+import type { Request, Response } from 'lacis'
+
+export async function POST(req: Request, res: Response) {
+  const body = await req.json()
+
+  const upstream = await fetch('http://localhost:11434/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+  res.stream(upstream.body!)
+}
+```
+</TabItem>
+<TabItem label="OpenAI">
+```ts
+import type { Request, Response } from 'lacis'
+import OpenAI from 'openai'
+
+const openai = new OpenAI()
+
+export async function POST(req: Request, res: Response) {
+  const { messages } = await req.json<{ messages: OpenAI.ChatCompletionMessageParam[] }>()
+
+  const stream = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    stream: true,
+    messages,
+  })
+
+  res.stream(stream.toReadableStream())
+}
+```
+</TabItem>
+<TabItem label="Anthropic">
+```ts
+import type { Request, Response } from 'lacis'
+import Anthropic from '@anthropic-ai/sdk'
+
+const anthropic = new Anthropic()
+
+export async function POST(req: Request, res: Response) {
+  const { prompt } = await req.json<{ prompt: string }>()
+
+  const stream = anthropic.messages.stream({
+    model: 'claude-opus-4-7',
+    max_tokens: 1024,
+    messages: [{ role: 'user', content: prompt }],
+  })
+
+  res.stream(stream.toReadableStream())
+}
+```
+</TabItem>
+</Tabs>
+
+## Generating NDJSON
+
+`res.ndjson(iter)` serializes each value from an async iterable as a JSON line. Sets `Content-Type: application/x-ndjson` automatically.
+
+```ts
+import type { Request, Response } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  async function* generate() {
+    for (let i = 0; i < 5; i++) {
+      yield { index: i, value: Math.random() }
+    }
+  }
+
+  res.ndjson(generate())
+}
+```
+
+## Transforming a stream
+
+Use `parseNDJSON` to parse an incoming NDJSON stream into objects, transform them, then re-stream to the client.
+
+```ts
+import { parseNDJSON } from 'lacis'
+import type { Request, Response } from 'lacis'
+
+export async function POST(req: Request, res: Response) {
+  const upstream = await fetch('http://localhost:11434/api/chat', {
+    method: 'POST',
+    body: await req.body(),
+  })
+
+  async function* tokens() {
+    for await (const chunk of parseNDJSON(upstream.body!)) {
+      const c = chunk as any
+      if (!c.done) yield { content: c.message?.content ?? '' }
+    }
+  }
+
+  res.ndjson(tokens())
+}
+```
+
+## Platform support
+
+| Platform | `res.stream()` | `res.ndjson()` |
+|---|---|---|
+| Node.js | streaming | streaming |
+| Bun | streaming | streaming |
+| Vercel | buffered | buffered |
+| Netlify | buffered | buffered |
+
+<Aside>
+On Vercel and Netlify, responses are always buffered — the full body is sent at once when the stream ends. For real-time streaming on serverless, use Vercel Edge Functions or Netlify Edge Functions instead.
+</Aside>
+
+## Difference from SSE
+
+`res.stream()` and `res.ndjson()` are raw HTTP streaming — no protocol, no reconnection logic, no event naming. Use them when the client (or an upstream service) already handles the format.
+
+Use [`res.initSSE()`](/features/sse) when you need the full SSE protocol: named events, retry, and browser `EventSource` compatibility.
