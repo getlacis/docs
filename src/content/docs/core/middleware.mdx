@@ -125,6 +125,33 @@ createServer('./routes', {
 
 Each property accepts a single handler or an array.
 
+## Per-route middleware (`use:`)
+
+File-based middleware is scoped by **path**. For middleware scoped to a single route — and
+crucially, a single **HTTP method** — pass `use:` to [`defineHandler`](/features/validation/).
+It runs after the path `+middleware`, before the handler; returning `false` (or sending the
+response) stops the chain.
+
+```ts
+// routes/users/index.ts
+import { defineHandler } from 'lacis'
+import { auth, rateLimit } from '../middleware'
+
+// GET /users is public...
+export const GET = defineHandler({
+  handler: async (req, res) => res.json({ users: [] }),
+})
+
+// ...but POST /users requires auth — impossible to express with path-scoped +middleware
+export const POST = defineHandler({
+  use: [rateLimit, auth],
+  handler: async (req, res) => res.status(201).json({ ok: true }),
+})
+```
+
+A `use:` middleware is the same `MiddlewareCallback` signature as `beforeRequest`, so it can
+read and write [`req.locals`](/core/request-response/#reqlocals) to pass context to the handler.
+
 ## Lifecycle hooks
 
 Lifecycle hooks are registered under `hooks` in `createServer`.

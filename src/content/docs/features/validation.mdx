@@ -50,6 +50,28 @@ meta: {
 }
 ```
 
+### `responses`
+
+A map of status code → Standard Schema. Declaring it does two things from one source of
+truth: it **types** the handler's `res` (see [Typed responses](#typed-responses)) and it
+**feeds** the [OpenAPI](/features/openapi/) spec.
+
+```ts
+responses: {
+  200: z.object({ id: z.string(), name: z.string() }),
+  404: z.object({ error: z.string() }),
+}
+```
+
+### `use`
+
+Per-route, per-method middleware — runs after path `+middleware`, before the handler. See
+[Per-route middleware](/core/middleware/#per-route-middleware-use).
+
+```ts
+use: [rateLimit, auth]
+```
+
 ### `handler`
 
 The actual request handler with fully typed `req` and `res`.
@@ -170,6 +192,35 @@ export const PUT = defineHandler({
   },
 })
 ```
+
+## Typed responses
+
+When you declare `responses`, the output side becomes type-safe too: `res.status(code).json(data)`
+only accepts the schema declared for that status code. It's **opt-in and non-breaking** — without
+`responses`, `res` stays the regular `Response`.
+
+```ts
+export const GET = defineHandler({
+  responses: {
+    200: z.object({ id: z.string(), name: z.string() }),
+    404: z.object({ error: z.string() }),
+  },
+  handler: async (req, res) => {
+    res.status(200).json({ id: '1', name: 'Ada' })  // ✓ matches the 200 schema
+    res.status(404).json({ id: 1 })                 // ✗ type error — 404 wants { error: string }
+  },
+})
+```
+
+<Aside type="tip" title="Escape hatch">
+`res.raw` is the untyped `Response` for streaming or edge cases: `res.raw.json(anything)`.
+</Aside>
+
+<Aside type="caution" title="Dev-only runtime check">
+In non-production (`NODE_ENV !== 'production'`), a returned body that violates its declared
+schema fails loudly — types don't catch an `any` coming from the database. There is **zero**
+response validation in production (for performance).
+</Aside>
 
 ## Type inference
 
