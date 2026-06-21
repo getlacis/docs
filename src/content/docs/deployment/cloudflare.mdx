@@ -1,0 +1,145 @@
+---
+title: Cloudflare Workers
+description: Deploy Lacis on Cloudflare Workers with the cloudflareAdapter and a pre-built routes manifest.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+<Aside type="caution" title="Serverless — routes must be pre-compiled">
+Workers have no persistent filesystem. Lacis cannot scan your `routes/` directory at request time. You must run `lacis build` first to generate a routes manifest.
+</Aside>
+
+Cloudflare is built on the **Web adapter base** (the same Web `Request`/`Response` model as Bun), so unlike Vercel and Netlify it **streams live** — `res.stream()` and SSE emit chunks as they are produced rather than buffering the whole response.
+
+## How it differs from the other adapters
+
+| | Node / Bun | Vercel / Netlify | Cloudflare |
+|---|---|---|---|
+| Config | `routesDir` string / `ServerlessConfig` | `ServerlessConfig` | `ServerlessConfig` |
+| Route discovery | scan / manifest | Pre-built manifest | Pre-built manifest |
+| Streaming | live | buffered | **live** |
+| `req.platform` | `{}` | `{}` | `{ env, ctx, cf }` |
+
+## Project structure
+
+```
+my-app/
+├── routes/
+│   ├── index.ts
+│   └── users/
+│       └── [id]/
+│           └── index.ts
+├── worker.ts
+├── env.d.ts
+└── wrangler.toml
+```
+
+## Worker entry point
+
+```ts
+// worker.ts
+import { cloudflareAdapter } from 'lacis/adapters'
+import { routes } from './routes/_manifest.js'
+
+export default cloudflareAdapter.createHandler({ routes })
+```
+
+<Aside>
+`createHandler` initializes routes, CORS, middleware, and hooks once on the first `fetch` and caches the result for subsequent requests in the same isolate.
+</Aside>
+
+## Accessing bindings: `req.platform`
+
+On Cloudflare, runtime context lives under `req.platform`:
+
+- `req.platform.env` — your Worker bindings (KV, D1, R2, Queues, secrets…)
+- `req.platform.ctx` — the `ExecutionContext` (e.g. `ctx.waitUntil`)
+- `req.platform.cf` — the incoming request's `IncomingRequestCfProperties`
+
+```ts
+// routes/users/[id]/index.ts
+import type { Request, Response } from 'lacis'
+
+export async function GET(req: Request, res: Response) {
+  const user = await req.platform.env.MY_KV.get(req.params!.id)
+  res.json({ user, country: req.platform.cf.country })
+}
+```
+
+### Typing `req.platform` with `env.d.ts`
+
+`req.platform` is empty by default and augmented via declaration merging. The Cloudflare template generates an `env.d.ts` so you access bindings without `as any`:
+
+```ts
+// env.d.ts
+/// <reference types="@cloudflare/workers-types" />
+
+interface Env {
+  MY_KV: KVNamespace
+  MY_DB: D1Database
+  // …your bindings
+}
+
+declare module 'lacis' {
+  interface PlatformContext {
+    env: Env
+    ctx: ExecutionContext
+    cf: IncomingRequestCfProperties
+  }
+}
+```
+
+## wrangler.toml
+
+```toml
+name = "my-app"
+main = "worker.ts"
+compatibility_date = "2024-09-23"
+
+# [[kv_namespaces]]
+# binding = "MY_KV"
+# id = "..."
+```
+
+## Deploy flow
+
+<Steps>
+
+1. Add `lacis build` to your build script:
+
+   ```json
+   {
+     "scripts": {
+       "build": "lacis build",
+       "deploy": "wrangler deploy"
+     }
+   }
+   ```
+
+2. Build the routes manifest and deploy:
+
+   ```bash
+   npm run build
+   wrangler deploy
+   ```
+
+</Steps>
+
+`lacis dev` detects `wrangler.toml` and runs `wrangler dev` for you after generating the manifest.
+
+## Notes
+
+- **SSE / `initSSE()`**: like Bun, Cloudflare must decide streaming synchronously — call `res.initSSE()` before the handler's first `await`.
+- **Client IP**: `req.connection.remoteAddress` is populated from the `cf-connecting-ip` header.
+- **`defaultHeaders`** are supported (pass them in the `ServerlessConfig`).
+
+## Optional config
+
+```ts
+export default cloudflareAdapter.createHandler({
+  routes,
+  maxBodySize: 5_000_000,
+  defaultHeaders: { 'X-Powered-By': 'Lacis' },
+  cors: { origin: 'https://myapp.com', credentials: true },
+})
+```
