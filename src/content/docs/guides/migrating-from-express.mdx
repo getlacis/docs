@@ -1,0 +1,223 @@
+---
+title: Migrating from Express
+description: A practical guide to moving an Express app to Lacis.
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Lacis covers most of what teams reach for `express` + a handful of middleware packages to do —
+routing, body parsing, cookies, CORS, rate limiting, validation — with **zero runtime
+dependencies** and **file-based routing**. This guide maps Express concepts to their Lacis
+equivalents.
+
+## At a glance
+
+| Express | Lacis |
+|---|---|
+| `app.get('/users', h)` | file `routes/users/index.ts` exporting `GET` |
+| `express.Router()` | directory nesting under `routes/` |
+| `req.params` / `req.query` | `req.params` / `req.query` (typed via `defineHandler`) |
+| `express.json()` + `req.body` | `await req.json()` (built in) |
+| `express.urlencoded()` + `req.body` | `await req.form()` (built in) |
+| `cookie-parser` + `req.cookies` | `req.cookies.get()` / `res.cookies.set()` (built in) |
+| `res.json` / `res.send` / `res.redirect` | same |
+| `res.set(name, val)` | `res.setHeader(name, val)` |
+| `app.use(mw)` (global) | `middleware.beforeRequest` or `+middleware.global.ts` |
+| `app.post('/x', auth, h)` (per-route) | `use: [auth]` in `defineHandler` |
+| `next()` / `next(err)` | return (or `return false` to stop); throw to error |
+| `app.use(errorHandler)` | `hooks.onError` + `createNotFoundError(...)` / `sendError` helpers |
+| `cors` package | built-in `cors` config |
+| `express-rate-limit` | built-in `createRateLimit` |
+| `joi` / `zod` middleware | `defineHandler({ params, query, body })` |
+| `app.listen(3000)` | `createServer(routesDir, { port: 3000 })` |
+
+## Routing
+
+Express registers routes imperatively; Lacis derives them from the filesystem.
+
+<Tabs>
+<TabItem label="Express">
+```ts
+const app = express()
+
+app.get('/users', getUsers)
+app.post('/users', createUser)
+app.get('/users/:id', getUser)
+```
+</TabItem>
+<TabItem label="Lacis">
+```ts
+// routes/users/index.ts
+export const GET = getUsers
+export const POST = createUser
+
+// routes/users/[id]/index.ts
+export const GET = getUser
+```
+</TabItem>
+</Tabs>
+
+See [Routing](/core/routing/) for the full file conventions.
+
+## Request body
+
+Express needs `express.json()` / `express.urlencoded()` registered before `req.body` is
+populated. Lacis parses on demand — no setup.
+
+<Tabs>
+<TabItem label="Express">
+```ts
+app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
+
+app.post('/users', (req, res) => {
+  const { name } = req.body
+  res.status(201).json({ name })
+})
+```
+</TabItem>
+<TabItem label="Lacis">
+```ts
+// routes/users/index.ts
+export async function POST(req, res) {
+  const { name } = await req.json()       // JSON bodies
+  // const form = await req.form()         // multipart or urlencoded
+  res.status(201).json({ name })
+}
+```
+</TabItem>
+</Tabs>
+
+## Middleware
+
+Global middleware maps to server config or a `+middleware.global.ts` file. Per-route
+middleware — including **per-method** scoping that Express expresses positionally — maps to
+`use:` in `defineHandler`.
+
+<Tabs>
+<TabItem label="Express">
+```ts
+// global
+app.use(logger)
+
+// per-route, runs only for this handler
+app.post('/users', rateLimit, auth, createUser)
+```
+</TabItem>
+<TabItem label="Lacis">
+```ts
+// global — server.ts
+createServer('./routes', { middleware: { beforeRequest: logger } })
+
+// per-route/per-method — routes/users/index.ts
+export const POST = defineHandler({
+  use: [rateLimit, auth],
+  handler: createUser,
+})
+```
+</TabItem>
+</Tabs>
+
+<Aside type="tip">
+In Express a middleware calls `next()` to continue or `next(err)` / sends a response to stop.
+In Lacis a middleware simply returns to continue, returns `false` (or sends the response) to
+stop, and throws to trigger error handling. Pass data to the handler via
+[`req.locals`](/core/request-response/#reqlocals) instead of mutating `req`.
+</Aside>
+
+## Validation
+
+Express has no built-in validation; you reach for `joi`, `express-validator`, or a `zod`
+middleware. Lacis builds it into `defineHandler` via [Standard Schema](https://standardschema.dev/),
+and the same schema feeds your [OpenAPI](/features/openapi/) spec.
+
+```ts
+import { defineHandler } from 'lacis'
+import { z } from 'zod'
+
+export const POST = defineHandler({
+  body: z.object({ name: z.string(), email: z.string().email() }),
+  handler: async (req, res) => {
+    const { name, email } = req.body  // typed & validated; 400 returned automatically on failure
+    res.status(201).json({ name, email })
+  },
+})
+```
+
+## Error handling
+
+Express uses a 4-argument error middleware. Lacis catches thrown errors automatically and
+routes them to the `onError` hook; typed HTTP error helpers replace manual status codes.
+
+<Tabs>
+<TabItem label="Express">
+```ts
+app.use((err, req, res, next) => {
+  res.status(err.status ?? 500).json({ error: err.message })
+})
+```
+</TabItem>
+<TabItem label="Lacis">
+```ts
+import { createServer, createNotFoundError } from 'lacis'
+
+// throw anywhere in a handler — Lacis sends the right status automatically:
+throw createNotFoundError('User not found')
+
+// central hook — server.ts
+createServer('./routes', {
+  hooks: {
+    onError: async (req, res, ctx) => {
+      if (!res.headersSent) res.status(500).json({ error: 'Internal Server Error' })
+    },
+  },
+})
+```
+</TabItem>
+</Tabs>
+
+See [Error Handling](/guides/error-handling/) for the full set of error constructors.
+
+## CORS & rate limiting
+
+Replace the `cors` and `express-rate-limit` packages with built-in config:
+
+```ts
+import { createServer, createRateLimit } from 'lacis'
+
+createServer('./routes', {
+  cors: { origin: 'https://myapp.com', credentials: true },
+  middleware: {
+    beforeRequest: createRateLimit({ windowMs: 60_000, max: 100 }),
+  },
+})
+```
+
+## Starting the server
+
+<Tabs>
+<TabItem label="Express">
+```ts
+app.listen(3000, () => console.log('listening'))
+```
+</TabItem>
+<TabItem label="Lacis (Node)">
+```ts
+import { nodeAdapter } from 'lacis/adapters'
+
+const createServer = nodeAdapter.createHandler('./routes')
+createServer({ port: 3000 })
+```
+</TabItem>
+</Tabs>
+
+The same routes run on Bun, Vercel, Netlify, and Cloudflare by swapping the adapter — see
+[Deployment](/deployment/node/).
+
+## What Lacis intentionally does not have
+
+- **A pluggable `app.use()` stack of arbitrary connect middleware.** Express middleware that
+  depends on the connect signature (`(req, res, next)`) won't drop in unchanged — port the
+  logic to a `beforeRequest`/`use:` function. Most are a few lines.
+- **A `view`/template engine integration.** Render with `res.html(...)` or return JSON for an
+  API-first app.
