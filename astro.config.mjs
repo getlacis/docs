@@ -134,6 +134,11 @@ export default defineConfig({
           translations: { fr: "Guides" },
           items: [
             {
+              label: "Migrating from Express",
+              slug: "guides/migrating-from-express",
+              translations: { fr: "Migration depuis Express" },
+            },
+            {
               label: "Error Handling",
               slug: "guides/error-handling",
               translations: { fr: "Gestion des erreurs" },
