@@ -122,6 +122,11 @@ export default defineConfig({
               slug: "deployment/netlify",
               translations: { fr: "Netlify" },
             },
+            {
+              label: "Cloudflare Workers",
+              slug: "deployment/cloudflare",
+              translations: { fr: "Cloudflare Workers" },
+            },
           ],
         },
         {
