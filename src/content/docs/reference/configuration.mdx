@@ -10,10 +10,11 @@ The `ServerConfig` object is passed as the second argument to `createServer` (fo
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `port` | `number` | `3000` | Port to listen on |
-| `platform` | `'node' \| 'bun' \| 'vercel' \| 'netlify'` | `'node'` | Target platform |
+| `platform` | `'node' \| 'bun' \| 'vercel' \| 'netlify' \| 'cloudflare'` | `'node'` | Target platform |
 | `isDev` | `boolean` | `NODE_ENV === 'development'` | Enables dev mode (verbose errors, monitoring) |
 | `timeout` | `number` | `30000` | Request timeout in milliseconds |
-| `defaultHeaders` | `Record<string, string>` | — | Headers added to every response |
+| `maxBodySize` | `number` | `10485760` (10 MB) | Max request body in bytes; larger requests get `413`. Applies to all adapters. |
+| `defaultHeaders` | `Record<string, string>` | — | Headers added to every response (node, bun, cloudflare) |
 
 ## `httpsOptions`
 
@@ -126,5 +127,22 @@ openapi: {
     version: '1.0.0',
     description: 'Optional description.',
   },
+  servers: [
+    { url: 'https://api.example.com', description: 'production' },
+  ],
 }
 ```
+
+## Runtime behavior by platform
+
+A few behaviors differ by runtime, by necessity. These are stable and intentional.
+
+| Behavior | node | bun | cloudflare | vercel | netlify |
+|---|---|---|---|---|---|
+| Streaming (`res.stream` / SSE) | live | live | live | buffered | buffered |
+| `initSSE()` before first `await` | not required | required | required | not required | not required |
+| `defaultHeaders` | ✓ | ✓ | ✓ | — | — |
+| `req.platform` | `{}` | `{}` | `{ env, ctx, cf }` | `{}` | `{}` |
+| 405 `Allow` header | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+Node cluster mode distributes requests via the OS (round-robin `SCHED_RR`); Lacis does no application-level load balancing.

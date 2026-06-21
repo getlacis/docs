@@ -56,10 +56,10 @@ const sse = res.initSSE({
 })
 ```
 
-## Bun constraint
+## Bun & Cloudflare constraint
 
 <Aside type="danger">
-On Bun, `initSSE()` **must be called synchronously before any `await`** in your handler. Bun's `Bun.serve()` needs the streaming `Response` object returned synchronously — if you `await` first, the window to initialize the SSE stream has already closed and Lacis will throw.
+On the runtime-Web adapters (**Bun** and **Cloudflare Workers**), `initSSE()` **must be called synchronously before any `await`** in your handler. These runtimes need the streaming `Response` object returned synchronously — if you `await` first, the window to initialize the SSE stream has already closed and Lacis will throw. Node.js, Vercel, and Netlify have no such constraint.
 </Aside>
 
 ```ts
@@ -71,10 +71,10 @@ export async function GET(req: Request, res: Response) {
   sse.close()
 }
 
-// ❌ Wrong on Bun — await before initSSE
+// ❌ Wrong on Bun / Cloudflare — await before initSSE
 export async function GET(req: Request, res: Response) {
   const data = await fetchSomething()
-  const sse = res.initSSE() // throws on Bun
+  const sse = res.initSSE() // throws on Bun / Cloudflare
 }
 ```
 
@@ -89,7 +89,7 @@ This constraint does not apply to Node.js.
 import type { Request, Response } from 'lacis'
 
 export async function POST(req: Request, res: Response) {
-  const sse = res.initSSE() // must be before any await on Bun
+  const sse = res.initSSE() // must be before any await on Bun / Cloudflare
 
   const { prompt } = await req.json<{ prompt: string }>()
 

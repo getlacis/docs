@@ -22,11 +22,30 @@ createServer('./routes', {
       title: 'My API',
       version: '1.0.0',
     },
+    servers: [
+      { url: 'https://api.example.com', description: 'production' },
+      { url: 'http://localhost:3000', description: 'local' },
+    ],
   },
 })
 ```
 
 The spec is served at `/openapi.json` on every request. No build step required.
+
+## Response schemas
+
+Declaring [`responses`](/features/validation/#typed-responses) on a route both types the
+handler and documents each status code in the spec — one source of truth.
+
+```ts
+export const GET = defineHandler({
+  responses: {
+    200: z.object({ id: z.string(), name: z.string() }),
+    404: z.object({ error: z.string() }),
+  },
+  handler: async (req, res) => res.status(200).json({ id: '1', name: 'Ada' }),
+})
+```
 
 ## Schema converters
 
@@ -105,6 +124,29 @@ openapi-generator-cli generate \
 ```
 
 See the [OpenAPI Generator docs](https://openapi-generator.tech/docs/installation/) for all supported generators and options.
+
+### Typed client with openapi-fetch
+
+Lacis ships **no** client codegen on purpose — mature tools do it better, in many languages,
+and writing one would betray the zero-dependency ethos. For an end-to-end typed TypeScript
+client with zero maintained code, point [`openapi-fetch`](https://openapi-ts.dev/openapi-fetch/)
+at your spec:
+
+```bash
+npx openapi-typescript http://localhost:3000/openapi.json -o ./src/api.d.ts
+```
+
+```ts
+import createClient from 'openapi-fetch'
+import type { paths } from './api'
+
+const api = createClient<paths>({ baseUrl: 'http://localhost:3000' })
+
+// path, params, body and response are all typed from your spec
+const { data, error } = await api.GET('/users/{id}', {
+  params: { path: { id: '1' } },
+})
+```
 
 ## Routes without `defineHandler`
 

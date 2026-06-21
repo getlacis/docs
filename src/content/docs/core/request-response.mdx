@@ -77,14 +77,26 @@ The body stream can only be read once. Call `req.json()` a single time per reque
 
 ### `req.form<T>()`
 
-Parses a `multipart/form-data` body. Plain fields are strings; file fields are `UploadedFile` objects.
+Parses a form body. Both content types are supported:
+
+- **`multipart/form-data`** — plain fields are strings; file fields are `UploadedFile` objects.
+- **`application/x-www-form-urlencoded`** — the standard HTML form POST; all fields are strings.
+
+Any other content type rejects with a clear error.
 
 ```ts
+// multipart/form-data (with file upload)
 export async function POST(req: Request, res: Response) {
   const form = await req.form<{ name: string; avatar: UploadedFile }>()
   console.log(form.name)           // 'Alice'
   console.log(form.avatar.size)    // file size in bytes
   res.status(201).json({ ok: true })
+}
+
+// application/x-www-form-urlencoded
+export async function POST(req: Request, res: Response) {
+  const form = await req.form<{ email: string; password: string }>()
+  res.status(200).json({ email: form.email })
 }
 ```
 
@@ -106,7 +118,7 @@ export async function POST(req: Request, res: Response) {
 
 **Signature:** `body(): Promise<Buffer>`
 
-Maximum body size is 10 MB. Larger requests are rejected with `413 Payload Too Large`.
+The default maximum body size is 10 MB; larger requests are rejected with `413 Payload Too Large`. Override it with the [`maxBodySize`](/reference/configuration/) server option.
 
 ---
 
@@ -167,6 +179,53 @@ export async function GET(req: Request, res: Response) {
   res.json({ ip })
 }
 ```
+
+---
+
+### `req.locals`
+
+Per-request bag for **application context** — pass data from middleware to handlers
+instead of abusing headers. It's typed via declaration merging and is global (every route
+sees the same shape — a deliberate trade-off for file-based routing).
+
+```ts
+// augment once, anywhere in your app
+declare module 'lacis' {
+  interface Locals {
+    user: { id: string; role: string }
+  }
+}
+
+// middleware sets it
+export const beforeRequest = async (req: Request) => {
+  req.locals.user = await authenticate(req)
+}
+
+// handler reads it (fully typed)
+export async function GET(req: Request, res: Response) {
+  res.json({ id: req.locals.user.id })
+}
+```
+
+**Type:** `Locals` (empty by default, augmentable)
+
+---
+
+### `req.platform`
+
+Runtime-specific bindings. Empty by default — a Node project exposes nothing — and
+populated with `{ env, ctx, cf }` on [Cloudflare Workers](/deployment/cloudflare/). Also
+augmentable via declaration merging (the Cloudflare scaffold generates the augmentation).
+
+```ts
+// on Cloudflare
+export async function GET(req: Request, res: Response) {
+  const value = await req.platform.env.MY_KV.get('key')
+  res.json({ value })
+}
+```
+
+**Type:** `PlatformContext` (empty by default, augmentable)
 
 ---
 

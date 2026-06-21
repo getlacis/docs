@@ -125,11 +125,14 @@ export async function POST(req: Request, res: Response) {
 |---|---|---|
 | Node.js | streaming | streaming |
 | Bun | streaming | streaming |
+| Cloudflare | streaming | streaming |
 | Vercel | buffered | buffered |
 | Netlify | buffered | buffered |
 
 <Aside>
 On Vercel and Netlify, responses are always buffered — the full body is sent at once when the stream ends. For real-time streaming on serverless, use Vercel Edge Functions or Netlify Edge Functions instead.
+
+**Cloudflare** is serverless but streams **live**: it uses the Web `Response` model (like Bun), so chunks are flushed as produced.
 </Aside>
 
 ## Difference from SSE
