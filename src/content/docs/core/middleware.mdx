@@ -149,8 +149,31 @@ export const POST = defineHandler({
 })
 ```
 
-A `use:` middleware is the same `MiddlewareCallback` signature as `beforeRequest`, so it can
-read and write [`req.locals`](/core/request-response/#reqlocals) to pass context to the handler.
+### Typed context — zero boilerplate
+
+A `use:` middleware that **returns an object** has it merged into
+[`req.locals`](/core/request-response/#reqlocals), and the type is **inferred** for the
+handler — no annotations, no `declare module`:
+
+```ts
+// middleware: just return what you add to the context
+const auth = (req) => {
+  const user = verify(req.getHeader('authorization'))
+  if (!user) return false   // returning false stops the chain
+  return { user }           // merged into req.locals, type inferred downstream
+}
+
+export const GET = defineHandler({
+  use: [auth],
+  handler: async (req, res) => {
+    res.json({ id: req.locals.user.id })  // req.locals.user is fully typed
+  },
+})
+```
+
+Returning `false` (or sending the response) stops the chain; returning nothing just continues.
+For cross-cutting context set by a file-based `+middleware`, augment `Locals` globally instead
+(see [`req.locals`](/core/request-response/#reqlocals)).
 
 ## Lifecycle hooks
 
