@@ -216,10 +216,21 @@ export const GET = defineHandler({
 `res.raw` is the untyped `Response` for streaming or edge cases: `res.raw.json(anything)`.
 </Aside>
 
-<Aside type="caution" title="Dev-only runtime check">
-In non-production (`NODE_ENV !== 'production'`), a returned body that violates its declared
-schema fails loudly — types don't catch an `any` coming from the database. There is **zero**
-response validation in production (for performance).
+<Aside type="caution" title="Dev-only runtime check (configurable)">
+By default, in non-production (`NODE_ENV !== 'production'`) a returned body that violates its
+declared schema fails loudly — types don't catch an `any` coming from the database — and there
+is **zero** response validation in production (for performance).
+
+Override it per route with `validateResponses`:
+
+```ts
+defineHandler({
+  responses: { 200: UserSchema },
+  validateResponses: true,   // enforce in production too
+  // validateResponses: false // or disable entirely, even in dev
+  handler: async (req, res) => res.status(200).json(user),
+})
+```
 </Aside>
 
 ## Type inference
