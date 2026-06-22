@@ -94,6 +94,32 @@ export async function GET(req: Request, res: Response) {
 Static segments take priority over dynamic ones. A request to `/users/settings` matches `routes/users/settings/index.ts` before `routes/users/[id]/index.ts`.
 </Aside>
 
+### Typed params from the folder (`./$types`)
+
+`lacis dev` and `lacis build` generate a per-route `$types` file so `req.params` is typed
+**from the folder name** — no schema, no `defineHandler` required:
+
+```ts
+// routes/users/[id]/index.ts
+import type { RouteHandler } from './$types'
+
+export const GET: RouteHandler = async (req, res) => {
+  req.params.id   // string — inferred from [id] ([id?] → string | undefined)
+  res.json({ id: req.params.id })
+}
+```
+
+This relies on TypeScript's `rootDirs`, which the `create-lacis` scaffold configures for you:
+
+```json
+// tsconfig.json
+{ "compilerOptions": { "rootDirs": [".", "./.lacis/types"] } }
+```
+
+The generated `.lacis/` directory is a build artifact — keep it out of version control
+(`.gitignore`). For runtime *validation* of params (and a typed response), combine this with
+[`defineHandler`](/features/validation/)'s `params` schema.
+
 ## Nested routes
 
 Nest directories to create nested URL paths. Each level can have its own `index.ts` with independent handlers.
