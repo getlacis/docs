@@ -68,6 +68,10 @@ export const GET = withCache(
 | `maxSize` | `number` | `500` | Entrées max avant éviction LRU |
 | `key` | `(req) => string` | `METHOD:URL` | Fonction de clé de cache |
 
+<Aside type="caution" title="Une clé personnalisée doit inclure tout ce dont dépend la réponse">
+La clé par défaut est `METHOD:URL`, qui inclut déjà la query string — elle est donc sûre par défaut. Si vous fournissez une `key` personnalisée, elle doit intégrer **toutes** les entrées dont la réponse dépend (paramètres de query, portée d'authentification, chemin). Une clé qui omet la query string servira le corps mis en cache d'un filtre pour un autre filtre. Notez aussi qu'un **hit** de cache renvoie directement le corps stocké : la validation de `params`/`query`/`body` n'est donc pas rejouée — ne construisez jamais une clé qui ignore quelque chose que votre validation ou votre handler lit.
+</Aside>
+
 ## Éviction LRU
 
 Quand `maxSize` est atteint, les 50 entrées les moins récemment utilisées sont évincées d'un coup. Les entrées expirent aussi individuellement selon le `ttl`.

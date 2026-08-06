@@ -68,6 +68,10 @@ export const GET = withCache(
 | `maxSize` | `number` | `500` | Max entries before LRU eviction |
 | `key` | `(req) => string` | `METHOD:URL` | Cache key function |
 
+<Aside type="caution" title="Custom keys must include everything the response depends on">
+The default key is `METHOD:URL`, which already includes the query string — so it is safe out of the box. If you supply a custom `key`, it must incorporate **every** input the response varies on (query params, auth scope, path). A key that omits the query string will serve one filter's cached body for a different filter. Note also that a cache **hit** returns the stored body directly, so `params`/`query`/`body` validation does not re-run — never build a key that drops something your validation or handler reads.
+</Aside>
+
 ## LRU eviction
 
 When `maxSize` is reached, the 50 least recently used entries are evicted at once. Entries also expire individually based on `ttl`.
