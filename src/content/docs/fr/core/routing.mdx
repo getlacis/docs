@@ -136,7 +136,8 @@ Utilisez un répertoire nommé `[...]` pour capturer tous les segments de chemin
 import type { Request, Response } from 'lacis'
 
 export async function GET(req: Request, res: Response) {
-  const filePath = req.params.path
+  // le reste du chemin est exposé sous la clé "*"
+  const filePath = req.params['*']
   res.json({ path: filePath })
 }
 ```

@@ -162,7 +162,8 @@ Use a `[...]` directory name to match any remaining path segments.
 import type { Request, Response } from 'lacis'
 
 export async function GET(req: Request, res: Response) {
-  const filePath = req.params.path
+  // the matched remainder is exposed under the "*" key
+  const filePath = req.params['*']
   res.json({ path: filePath })
 }
 ```
