@@ -23,6 +23,21 @@ createServer({
 })
 ```
 
+<Aside type="caution" title="openapi & onShutdown need the top-level createServer">
+`nodeAdapter.createHandler` is the low-level entry point. The `openapi` spec/route, the `onShutdown` hook, and graceful `SIGINT`/`SIGTERM` handling are wired by the top-level `createServer` from `lacis` — not by the adapter. If you use those features, use that form instead:
+
+```ts
+import { createServer } from 'lacis'
+
+createServer('./routes', {
+  port: 3000,
+  isDev: process.env.NODE_ENV !== 'production',
+  openapi: { path: '/openapi.json', info: { title: 'My API', version: '1.0.0' } },
+  hooks: { onShutdown: async () => { await db.close() } },
+})
+```
+</Aside>
+
 ## Config options
 
 | Option | Type | Default | Description |
