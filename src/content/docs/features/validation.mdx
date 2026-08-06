@@ -221,6 +221,11 @@ By default, in non-production (`NODE_ENV !== 'production'`) a returned body that
 declared schema fails loudly — types don't catch an `any` coming from the database — and there
 is **zero** response validation in production (for performance).
 
+A violation surfaces as a **500 Internal Server Error**, not a `400`: it signals a server-side bug
+(you returned the wrong shape), not bad client input. One caveat — enforcement is asymmetric by
+validator kind: a **synchronous** schema throws (→ 500), while an **async** schema can only log the
+mismatch with `console.error` (the response has already been written by the time it resolves).
+
 Override it per route with `validateResponses`:
 
 ```ts
