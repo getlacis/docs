@@ -166,9 +166,12 @@ throw createNotFoundError('User not found')
 
 // central hook — server.ts
 createServer('./routes', {
-  hooks: {
+  middleware: {
+    // Keep onError log-only: Lacis sends the correct status for a thrown error
+    // automatically once this returns. Sending a response here would override it
+    // and downgrade every thrown 401/404/409 to whatever you send.
     onError: async (req, res, ctx) => {
-      if (!res.headersSent) res.status(500).json({ error: 'Internal Server Error' })
+      console.error(ctx.error)
     },
   },
 })

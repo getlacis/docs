@@ -121,6 +121,10 @@ createServer('./routes', {
 })
 ```
 
+<Aside type="caution" title="Un onError qui répond écrase le statut automatique">
+Quand vous `throw` un constructeur d'erreur, Lacis envoie le bon statut automatiquement **après** l'exécution de `onError` — mais uniquement si `onError` a laissé `res.headersSent` à false. Si votre `onError` écrit lui-même une réponse (par exemple un `res.status(500).json(...)` générique), cette réponse l'emporte et chaque `401`/`404`/`409` lancé est rétrogradé au statut que vous avez envoyé. Gardez `onError` en logs uniquement, ou transmettez l'erreur réelle avec `sendError(normalizeError(ctx.error), res)` comme ci-dessus — n'envoyez jamais un statut codé en dur.
+</Aside>
+
 ## `normalizeError`
 
 Convertit n'importe quelle erreur inconnue en `HttpError` typé. Utile dans `onError` quand vous ne contrôlez pas la source de l'erreur :
